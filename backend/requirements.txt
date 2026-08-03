@@ -15,7 +15,13 @@ pymupdf
 spacy
 
 # ==========================
+# Embedding Models 
+# ==========================
+sentence-transformers
+
+# ==========================
 # Utilities
 # ==========================
 python-dotenv
 pydantic
+

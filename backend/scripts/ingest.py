@@ -22,16 +22,17 @@ def main():
     print("="*60)
 
     for document in documents:
-        print(f"\nFilename : {document['filename']}")
-        print(f"Category : {document['category']}")
-        print(f"Pages    : {document['pages']}")
+        print(f"\nFilename : {document.filename}")
+        # print(f"Filepath : {document.filepath}")
+        print(f"Category : {document.category}")
+        print(f"Pages    : {document.page_count}")
 
         # Raw text preview
-        # preview = document["text"][:300].replace("\n", " ")
+        # preview = document["raw_text"][:300].replace("\n", " ")
         # print(f"Preview  : {preview}...")
 
         # Clean text preview
-        preview = document["cleaned_text"][:600]
+        preview = document.cleaned_text[:300]
         print(f"Preview  : {preview}...")
 
 

@@ -1,6 +1,8 @@
 from pathlib import Path
 import fitz
 from app.rag.preprocessing.text_cleaner import TextCleaner
+from app.models.document import Document
+
 
 class PDFLoader:
     """
@@ -16,12 +18,7 @@ class PDFLoader:
         pdf_files = self.knowledge_base_path.rglob("*.pdf")
 
         for pdf_path in pdf_files:
-            category = pdf_path.parent.name
-
             document = self.load_pdf(pdf_path)
-
-            document["category"] = category
-
             documents.append(document)
 
         return documents
@@ -35,10 +32,11 @@ class PDFLoader:
 
         cleaned_text = TextCleaner.clean(text)
 
-        return {
-            "filename" : pdf_path.name,
-            "filepath" : str(pdf_path),
-            "pages" : len(pdf),
-            "text" : text,
-            "cleaned_text" : cleaned_text
-        }
+        return Document(
+            filename = pdf_path.name,
+            filepath = str(pdf_path),
+            category = pdf_path.parent.name,
+            page_count=len(pdf),
+            raw_text=text,
+            cleaned_text=cleaned_text,
+        )

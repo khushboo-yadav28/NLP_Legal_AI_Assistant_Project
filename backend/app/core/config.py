@@ -1,0 +1,10 @@
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 200
+
+EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+
+VECTOR_DB = "postgres"
+
+COLLECTION_NAME = "legal_ai"
+
+TOP_K = 5
