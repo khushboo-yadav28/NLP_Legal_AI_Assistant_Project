@@ -1,5 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel,Field
 from typing import Optional
+from datetime import datetime
 
 class Chunk(BaseModel):
     """
@@ -16,5 +17,7 @@ class Chunk(BaseModel):
     end_char: int
 
     page_number: Optional[int] = None
-    text: str # Actual chunk
-    embedding: Optional[list[float]] = None 
+    text: str # Actual chunk (overlap + chunk) this is embedded
+    embedding: Optional[list[float]] = None # filled after embedding model runs
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
