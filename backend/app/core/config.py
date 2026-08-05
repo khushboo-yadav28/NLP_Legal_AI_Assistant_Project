@@ -17,4 +17,5 @@ VECTOR_DB = os.getenv("VECTOR_DB", "postgres")
 
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "legal_ai")
 
-TOP_K = int(os.getenv("TOP_K", 5))
+VECTOR_TOP_K  = int(os.getenv("VECTOR_TOP_K", 20))
+FINAL_TOP_K = int(os.getenv("FINAL_TOP_K", 5))
