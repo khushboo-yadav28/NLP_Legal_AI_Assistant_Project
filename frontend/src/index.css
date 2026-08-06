@@ -1,0 +1,80 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Merriweather:wght@400;700&display=swap');
+
+/* Tailwind v4 import */
+@import "tailwindcss";
+
+/* Define your custom brand colors and fonts here instead of the config file */
+@theme {
+  --color-brand-blue: #0B1B3D;
+  --color-brand-gold: #C5A059;
+  --color-brand-light: #F8F9FA;
+  --color-brand-user: #E9ECEF;
+  
+  --font-sans: 'Inter', sans-serif;
+  --font-serif: 'Merriweather', serif;
+}
+
+/* Base body styles using standard CSS variables to prevent @apply errors */
+body {
+  background-color: var(--color-brand-light);
+  font-family: var(--font-sans);
+  color: #1f2937; /* Tailwind gray-800 */
+  margin: 0;
+  padding: 0;
+}
+
+/* Custom Scrollbar for a premium feel */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-brand-gold);
+  border-radius: 10px;
+  opacity: 0.5;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-brand-blue);
+}
+
+/* Slide-up fade animation for chat messages */
+@keyframes slideUpFade {
+  0% {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-message {
+  animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+/* Add inside index.css */
+/* Custom Legal Markdown Styling for Bot Responses */
+.prose blockquote {
+  border-left-color: var(--color-brand-gold) !important;
+  background-color: rgba(197, 160, 89, 0.1);
+  padding: 10px 20px;
+  border-radius: 0 8px 8px 0;
+  font-style: italic;
+  margin: 1rem 0;
+}
+
+.prose strong {
+  color: var(--color-brand-gold) !important;
+}
+
+.prose ul li::marker {
+  color: var(--color-brand-gold) !important;
+}
+
+.prose h3 {
+  color: var(--color-brand-gold) !important;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
