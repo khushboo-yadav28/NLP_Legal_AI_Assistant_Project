@@ -1,42 +1,89 @@
-from app.rag.loaders.pdf_loader import PDFLoader
-# from app.rag.preprocessing.text_cleaner import TextCleaner
 from pathlib import Path
 
+from app.db.database import SessionLocal
+
+from app.db.repositories.document_repository import DocumentRepository
+from app.db.repositories.chunk_repository import ChunkRepository
+
+from app.rag.loaders.pdf_loader import PDFLoader
+from app.rag.chunking.chunker import TextChunker
+from app.rag.embeddings.embedding_model import EmbeddingModel
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 KNOWLEDGE_BASE = BASE_DIR / "knowledge_base"
-
-# print(KNOWLEDGE_BASE)
-# print(KNOWLEDGE_BASE.exists())
 
 
 def main():
+
+    db = SessionLocal()
+
+    document_repo = DocumentRepository(db)
+    chunk_repo = ChunkRepository(db)
+
     loader = PDFLoader(KNOWLEDGE_BASE)
+    chunker = TextChunker()
+    # embedding_model = EmbeddingModel()
 
     documents = loader.load_documents()
 
-    print("="*60)
+    print(f"\nFound {len(documents)} document(s).\n")
 
-    print(f"Loaded {len(documents)} documents")
-
-    print("="*60)
+    new_documents = []
 
     for document in documents:
-        print(f"\nFilename : {document.filename}")
-        # print(f"Filepath : {document.filepath}")
-        print(f"Category : {document.category}")
-        print(f"Pages    : {document.page_count}")
+        if document_repo.exists(document.file_hash):
+            print("Already ingested. Skipping")
+        else:
+            new_documents.append(document)
 
-        # Raw text preview
-        # preview = document["raw_text"][:300].replace("\n", " ")
-        # print(f"Preview  : {preview}...")
+    if not new_documents:
+        print("No new documents found.")
+        return
 
-        # Clean text preview
-        preview = document.cleaned_text[:300]
-        print(f"Preview  : {preview}...")
+    embedding_model = EmbeddingModel()
 
+    for document in new_documents:
 
-        print("-" * 60)
+        print("=" * 70)
+        print(document.filename)
+
+        # Skip unchanged files
+        # if document_repo.exists(document.file_hash):
+        #     print("Already ingested. Skipping.")
+        #     continue
+
+        # print("New document.")
+
+        # Chunk document
+        chunks = chunker.split_document(document)
+
+        print(f"Chunks created : {len(chunks)}")
+
+        # Generate embeddings
+        chunks = embedding_model.embed_chunks(chunks)
+
+        print("Embeddings generated.")
+
+        try :
+            # Save document
+            document_repo.save(document)
+
+            # Save chunks
+            chunk_repo.save_chunks(chunks)
+
+            db.commit()
+
+        except:
+            db.rollback()
+            raise
+
+        print("Saved to PostgreSQL.")
+
+    db.close()
+
+    print("\nDone.")
+
 
 if __name__ == "__main__":
     main()

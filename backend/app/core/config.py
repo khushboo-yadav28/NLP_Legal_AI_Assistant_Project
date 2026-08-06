@@ -1,10 +1,21 @@
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 200
+from dotenv import load_dotenv
+import os
 
-EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+load_dotenv()
 
-VECTOR_DB = "postgres"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-COLLECTION_NAME = "legal_ai"
+EMBEDDING_MODEL = os.getenv(
+    "EMBEDDING_MODEL",
+    "BAAI/bge-small-en-v1.5"
+)
 
-TOP_K = 5
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 1000))
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 200))
+
+VECTOR_DB = os.getenv("VECTOR_DB", "postgres")
+
+COLLECTION_NAME = os.getenv("COLLECTION_NAME", "legal_ai")
+
+VECTOR_TOP_K  = int(os.getenv("VECTOR_TOP_K", 20))
+FINAL_TOP_K = int(os.getenv("FINAL_TOP_K", 5))

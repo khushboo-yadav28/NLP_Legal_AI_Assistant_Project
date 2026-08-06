@@ -13,3 +13,4 @@ class Document(BaseModel):
     page_count : int
     raw_text: str
     cleaned_text: str
+    file_hash : str

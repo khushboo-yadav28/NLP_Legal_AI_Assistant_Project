@@ -12,8 +12,6 @@ class TextCleaner:
 
         # Normalize line endings, Replace any \r\n or \r with \n
         text = re.sub(r'\r\n?','\n', text)
-        # text = text.replace("\r\n","\n")
-        # text = text.replace("\r","\n")
 
         # Replace tabs with spaces
         text = text.replace("\t"," ")
@@ -44,5 +42,26 @@ class TextCleaner:
 
         # Remove extra blank lines
         text = re.sub(r"\n\s*\n+","\n\n",text)
+
+        # Remove page numbers (line contains only digits)
+        text = re.sub(r"(?m)^\s*\d+\s*$","",text)
+
+        # Remove common editorial references
+        text = re.sub(
+            r"Rep\.\s*by\s*s\.\s*\d+.*?(?:ibid\.?)",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+
+        # Remove standalone footnote/reference lines
+        text = re.sub(
+            r"(?im)^\s*(?:See|Cf\.?|ibid|infra|supra)\b.*$",
+            "",
+            text,
+        )
+
+        # Remove editorial repeal entries
+        text = re.sub(r"(?im)^\s*\d+\.\s*\[Repealed\.\]\s*$","",text)
 
         return text.strip()

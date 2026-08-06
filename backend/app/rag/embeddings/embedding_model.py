@@ -6,7 +6,7 @@ text -> sentence-transformers -> vector (384 dimensions)
 from sentence_transformers import SentenceTransformer
 
 from app.models.chunk import Chunk
-from ...core.config import EMBEDDING_MODEL
+from app.core.config import EMBEDDING_MODEL
 
 
 class EmbeddingModel:
@@ -14,9 +14,17 @@ class EmbeddingModel:
     Wrapper around SentenceTransformer.
     Responsible for converting text into embeddings.
     """
+    _model = None
 
     def __init__(self):
-        self.model = SentenceTransformer(EMBEDDING_MODEL)
+        if EmbeddingModel._model is None:
+            print("Loading embedding model...")
+            EmbeddingModel._model = SentenceTransformer(EMBEDDING_MODEL)
+
+
+    @property
+    def model(self):
+        return EmbeddingModel._model
 
     def embed_text(self,text:str)-> list[float]:
         embedding = self.model.encode(
@@ -42,3 +50,20 @@ class EmbeddingModel:
         ).tolist()
         
         return chunk
+
+    def embed_chunks(self, chunks: list[Chunk]) -> list[Chunk]:
+        """
+        Generate embeddings for multiple chunks.
+        """
+
+        texts = [chunk.text for chunk in chunks]
+
+        embeddings = self.model.encode(
+            texts,
+            normalize_embeddings=True,
+        )
+
+        for chunk, embedding in zip(chunks, embeddings):
+            chunk.embedding = embedding.tolist()
+
+        return chunks
