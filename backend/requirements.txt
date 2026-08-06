@@ -28,3 +28,7 @@ sentence-transformers
 python-dotenv
 pydantic
 
+# ==========================
+# LLM
+# ==========================
+google-genai

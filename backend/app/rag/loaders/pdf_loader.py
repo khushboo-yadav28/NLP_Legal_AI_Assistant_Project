@@ -19,6 +19,7 @@ class PDFLoader:
 
         for pdf_path in pdf_files:
             document = self.load_pdf(pdf_path)
+            # print(document.cleaned_text)
             documents.append(document)
 
         return documents

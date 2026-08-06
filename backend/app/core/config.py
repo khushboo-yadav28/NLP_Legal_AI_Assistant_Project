@@ -17,5 +17,14 @@ VECTOR_DB = os.getenv("VECTOR_DB", "postgres")
 
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "legal_ai")
 
-VECTOR_TOP_K  = int(os.getenv("VECTOR_TOP_K", 20))
+VECTOR_SEARCH_K  = int(os.getenv("VECTOR_TOP_K", 50))
+RERANK_TOP_K = int(os.getenv("RERANK_TOP_K",20))
 FINAL_TOP_K = int(os.getenv("FINAL_TOP_K", 5))
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+LLM_MODEL = os.getenv("LLM_MODEL","gemini-3.5-flash-lite")
+
+LLM_TEMPERATURE = os.getenv("LLM_TEMPERATURE","0.3")
+
+LLM_MAX_OUTPUT_TOKENS = os.getenv("LLM_MAX_OUTPUT_TOKENS","300")

@@ -23,7 +23,7 @@ def main():
 
     loader = PDFLoader(KNOWLEDGE_BASE)
     chunker = TextChunker()
-    # embedding_model = EmbeddingModel()
+    embedding_model = EmbeddingModel()
 
     documents = loader.load_documents()
 
@@ -49,11 +49,11 @@ def main():
         print(document.filename)
 
         # Skip unchanged files
-        # if document_repo.exists(document.file_hash):
-        #     print("Already ingested. Skipping.")
-        #     continue
+        if document_repo.exists(document.file_hash):
+            print("Already ingested. Skipping.")
+            continue
 
-        # print("New document.")
+        print("New document.")
 
         # Chunk document
         chunks = chunker.split_document(document)

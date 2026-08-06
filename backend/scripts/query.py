@@ -1,7 +1,8 @@
 from app.db.database import SessionLocal
 from app.rag.embeddings.embedding_model import EmbeddingModel
 from app.rag.retrieval.retriever import Retriever
-
+from app.rag.generation.prompt_builder import PromptBuilder
+from app.rag.generation.llm import GeminiClient
 
 def main():
 
@@ -15,26 +16,39 @@ def main():
             embedding_model=embedding_model
         )
 
+        llm = GeminiClient()
+
         query = input("Ask: ")
 
         results = retriever.retrieve(query)
 
-        print()
+        prompt = PromptBuilder.build(
+                query=query,
+                results=results
+            )
 
-        for rank, (chunk, distance, rerank_score) in enumerate(results, start=1):
+        answer = llm.generate(prompt)
+        
+        print("\n" + "="*80)
+        print(answer)
+        print("="*80)
 
-            print("=" * 70)
-            print(f"Rank                : {rank}")
+        # for rank, (chunk, distance, rerank_score) in enumerate(results, start=1):
+        
+        # for rank, (chunk, distance, score) in enumerate(results, start=1):
 
-            print(f"Vector Distance     : {distance:.4f}")
-            print(f"Vector Similarity   : {1 - distance:.4f}")
+        #     print("=" * 70)
+        #     print(f"Rank                : {rank}")
+        #     print(f"Chunk Index :       : {chunk.chunk_index}")
+        #     print(f"Vector Distance     : {distance:.4f}")
+        #     print(f"Vector Similarity   : {1 - distance:.4f}")
 
-            print(f"Reranker Score      : {rerank_score:.4f}")
-
-            print(f"Document            : {chunk.filename}")
-            print(f"Category            : {chunk.category}\n")
-            print(chunk.text)
-            print()
+        #     # print(f"Reranker Score      : {rerank_score:.4f}")
+        #     print(f"Reranker Score      : {score:.4f}")
+        #     print(f"Document            : {chunk.filename}")
+        #     print(f"Category            : {chunk.category}\n")
+        #     print(chunk.text)
+        #     print()
 
     finally:
         db.close()

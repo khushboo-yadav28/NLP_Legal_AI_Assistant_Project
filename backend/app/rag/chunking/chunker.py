@@ -2,7 +2,7 @@ from typing import List
 from app.models.document import Document
 from app.models.chunk import Chunk
 from app.core.config import CHUNK_SIZE, CHUNK_OVERLAP
-
+import re
 class TextChunker:
     """
     Splits cleaned text into overlapping chunks.
@@ -21,7 +21,10 @@ class TextChunker:
         self.separators = [
             "\n\n",
             "\n",
+            # "Illustrations",
+            # "Illustration",
             ". ",
+            "; ",
             " ",
             ""
         ]
@@ -34,6 +37,9 @@ class TextChunker:
 
         text = document.cleaned_text
 
+        if not text:
+            return []
+        
         # Step 1: recursively split
         splits = self._recursive_split(
             text,
@@ -41,10 +47,11 @@ class TextChunker:
         )
 
         # Step 2: merge into ~chunk_size chunks
-        merged_chunks = self._merge_splits(splits)
+        # merged_chunks = self._merge_splits(splits)
 
         # Step 3: apply overlap
-        merged_chunks = self._apply_overlap(merged_chunks)
+        # merged_chunks = self._apply_overlap(merged_chunks)
+        merged_chunks = self._merge_and_overlap(splits)
 
         chunks = []
 
@@ -79,7 +86,8 @@ class TextChunker:
                 )
             )
 
-            search_start = end_char
+            # search_start = end_char
+        search_start = max(0, end_char - self.chunk_overlap)
 
         return chunks
 
@@ -140,66 +148,134 @@ class TextChunker:
 
         return results
 
-    def _merge_splits(
-        self,
-        splits: list[str]
-    ) -> list[str]:
-        """
-        Merge small semantic splits into chunks close to chunk_size.
-        """
+    # def _merge_splits(
+    #     self,
+    #     splits: list[str]
+    # ) -> list[str]:
+    #     """
+    #     Merge small semantic splits into chunks close to chunk_size.
+    #     """
 
+    #     merged_chunks = []
+
+    #     current_chunk = []
+    #     current_length = 0
+
+    #     for split in splits:
+
+    #         split_length = len(split)
+
+    #         # If adding this split exceeds chunk size,
+    #         # save current chunk and start a new one.
+    #         if (
+    #             current_chunk
+    #             and current_length + split_length > self.chunk_size
+    #         ):
+    #             merged_chunks.append("".join(current_chunk).strip())
+
+    #             current_chunk = []
+    #             current_length = 0
+
+    #         current_chunk.append(split)
+    #         current_length += split_length
+
+    #     # Add the last chunk
+    #     if current_chunk:
+    #         merged_chunks.append("".join(current_chunk).strip())
+
+    #     return merged_chunks
+
+    # def _apply_overlap(
+    #         self,
+    #         chunks: list[str]
+    #     ) -> list[str]:
+    #     """
+    #     Adds character overlap between consecutive chunks.
+    #     """
+
+    #     if not chunks:
+    #         return []
+
+    #     overlapped = [chunks[0]]
+
+    #     for i in range(1, len(chunks)):
+
+    #         previous = chunks[i - 1]
+    #         current = chunks[i]
+
+    #         # Look only at last overlap characters
+    #         tail = previous[-self.chunk_overlap:]
+
+    #         # Find the first sentence boundary inside the tail
+    #         matches = list(re.finditer(r"[.!?]\s+", tail))
+
+    #         if matches:
+    #             overlap = tail[matches[0].end():]
+    #         else:
+    #             overlap = tail
+
+    #         overlapped.append(
+    #             overlap.strip() + "\n" + current
+    #         )
+    #         # overlap = previous[-self.chunk_overlap:]
+    #         # space = overlap.find(" ")
+
+    #         # if space != -1:
+    #         #     overlap = overlap[space + 1:]
+    #         #     overlapped.append(overlap + current)
+
+    #     return overlapped
+
+    def _extract_last_sentence(self, text: str) -> str:
+        """
+        Extracts the last complete sentence from a text block.
+        If no sentence punctuation is found, returns empty string.
+        """
+        # Finds sentence boundaries ending in ., !, or ?
+        # sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+        sentences = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9(\"'])", text.strip())
+        
+        if len(sentences) > 1:
+            last_sentence = sentences[-1].strip()
+            # Safety check: avoid returning an excessively long sentence
+            if 15 <= len(last_sentence) <= self.chunk_overlap * 1.5:
+                return last_sentence + " "
+        
+        return ""
+
+    def _merge_and_overlap(self, splits: list[str]) -> list[str]:
+        """
+        Merges small splits into chunks bounded by chunk_size while applying
+        the last complete sentence as overlap for the next chunk.
+        """
         merged_chunks = []
-
         current_chunk = []
         current_length = 0
 
         for split in splits:
-
             split_length = len(split)
 
-            # If adding this split exceeds chunk size,
-            # save current chunk and start a new one.
-            if (
-                current_chunk
-                and current_length + split_length > self.chunk_size
-            ):
-                merged_chunks.append("".join(current_chunk).strip())
+            if current_chunk and (current_length + split_length > self.chunk_size):
+                full_chunk_text = "".join(current_chunk).strip()
+                merged_chunks.append(full_chunk_text)
 
-                current_chunk = []
-                current_length = 0
+                # Extract the last complete sentence to carry over
+                overlap_sentence = self._extract_last_sentence(full_chunk_text)
 
-            current_chunk.append(split)
-            current_length += split_length
+                if overlap_sentence:
+                    current_chunk = [overlap_sentence, split]
+                    current_length = len(overlap_sentence) + split_length
+                else:
+                    current_chunk = [split]
+                    current_length = split_length
+            else:
+                current_chunk.append(split)
+                current_length += split_length
 
-        # Add the last chunk
         if current_chunk:
-            merged_chunks.append("".join(current_chunk).strip())
+            # merged_chunks.append("".join(current_chunk).strip())
+            final_text = " ".join(current_chunk).strip()
+            final_text = re.sub(r"[ ]{2,}", " ", final_text)
+            merged_chunks.append(final_text)
 
         return merged_chunks
-
-    def _apply_overlap(
-            self,
-            chunks: list[str]
-        ) -> list[str]:
-        """
-        Adds character overlap between consecutive chunks.
-        """
-
-        if not chunks:
-            return []
-
-        overlapped = [chunks[0]]
-
-        for i in range(1, len(chunks)):
-
-            previous = chunks[i - 1]
-            current = chunks[i]
-
-            overlap = previous[-self.chunk_overlap:]
-            space = overlap.find(" ")
-
-            if space != -1:
-                overlap = overlap[space + 1:]
-                overlapped.append(overlap + current)
-
-        return overlapped

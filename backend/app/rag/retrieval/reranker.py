@@ -1,7 +1,7 @@
 from sentence_transformers import CrossEncoder
 
 from app.db.chunk_model import ChunkTable
-from app.core.config import FINAL_TOP_K
+from app.core.config import RERANK_TOP_K
 
 
 class Reranker:
@@ -20,8 +20,8 @@ class Reranker:
         self,
         query: str,
         results: list[tuple[ChunkTable, float]],
-        top_k: int = FINAL_TOP_K
-    ) -> list[tuple[ChunkTable, float]]:
+        top_k: int = RERANK_TOP_K
+    ) -> list[tuple[ChunkTable, float, float]]:
 
         pairs = [(query, chunk.text) for chunk, _ in results]
 
@@ -38,3 +38,4 @@ class Reranker:
         )
 
         return reranked[:top_k]
+        # return reranked
