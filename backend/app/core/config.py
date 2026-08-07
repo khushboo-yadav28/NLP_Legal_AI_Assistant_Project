@@ -17,9 +17,9 @@ VECTOR_DB = os.getenv("VECTOR_DB", "postgres")
 
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "legal_ai")
 
-VECTOR_SEARCH_K  = int(os.getenv("VECTOR_TOP_K", 50))
-RERANK_TOP_K = int(os.getenv("RERANK_TOP_K",20))
-FINAL_TOP_K = int(os.getenv("FINAL_TOP_K", 5))
+VECTOR_SEARCH_K  = int(os.getenv("VECTOR_TOP_K", 20))
+RERANK_TOP_K = int(os.getenv("RERANK_TOP_K",10))
+FINAL_TOP_K = int(os.getenv("FINAL_TOP_K", 4))
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 

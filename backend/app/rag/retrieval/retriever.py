@@ -21,11 +21,12 @@ class Retriever:
     def __init__(
         self,
         db: Session,
-        embedding_model: EmbeddingModel
+        embedding_model: EmbeddingModel,
+        reranker: Reranker
     ):
         self.embedding_model = embedding_model
         self.vector_store = VectorStore(db)
-        self.reranker = Reranker()
+        self.reranker = reranker
         self.query_expander = QueryExpander()
         self.diversifier = DiversityFilter()
 

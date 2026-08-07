@@ -1,8 +1,7 @@
-from app.db.database import engine
-from app.db.database import Base
+from app.db.database import engine, Base
 from app.db.document_model import DocumentTable
 from app.db.chunk_model import ChunkTable
-
+from app.db.user_chat_models import UserTable,ChatMessageTable,ChatSessionTable
 
 
 

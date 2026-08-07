@@ -1,0 +1,23 @@
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from app.rag.embeddings.embedding_model import EmbeddingModel
+from app.rag.generation.llm import GeminiClient
+from app.rag.retrieval.reranker import Reranker
+from app.api.routes.chat import router as chat_router
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Load heavy models into memory ONCE
+    print("Initializing heavy models (Embedding Model & Gemini Client)...")
+    app.state.embedding_model = EmbeddingModel()
+    app.state.llm_client = GeminiClient()
+    app.state.reranker = Reranker()
+    print("Models loaded successfully.")
+    
+    yield  # Server runs and handles requests here
+    
+    # Shutdown: Clean up resources if necessary
+    print("Shutting down application...")
+
+app = FastAPI(title="Legal AI India API", lifespan=lifespan)
+app.include_router(chat_router, prefix="/api")
