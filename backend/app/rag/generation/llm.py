@@ -34,12 +34,11 @@ Rules:
 2. Seamless Knowledge Fallback: If the retrieved context references a legal provision (like a Section or Act) but lacks its full text, or if context is missing specific statutory details, use your authoritative knowledge of Indian Law to provide a complete answer.
 3. Seamless Tone: Do NOT mention, state, or imply that context was missing, incomplete, or retrieved from an index chunk. Never say "I couldn't find enough information" or "The provided context is partial".
 4. Language Style: Rewrite complex legalese into clear, concise, everyday English. Answer directly first.
-5. Domain Guardrail: Answer ONLY questions related to law, contracts, statutes, and legal procedures. Politely decline non-legal requests.
-
+5. Domain Guardrail: Answer ONLY questions related to law, contracts, statutes, and legal procedures. Politely decline non-legal requests without citing any sources or adding a "Sources:" section.
 Length & Format Constraints:
 - Keep responses concise, targeted, and scannable (around 150-250 words maximum).
 - Structure: Combine a short introductory paragraph with 3-4 key bullet points.
-- Sources Formatting: End your response with a concise "Sources:" list.
+- Sources Formatting: End your response with a concise "Sources:" list ONLY if you used relevant legal context or statutes to answer a legal question. Do NOT include a "Sources:" section if you are declining a non-legal request.
 """
     
     @retry(
