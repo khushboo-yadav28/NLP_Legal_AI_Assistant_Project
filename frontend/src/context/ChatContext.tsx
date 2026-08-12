@@ -1,7 +1,6 @@
 // src/context/ChatContext.tsx
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-// Define the structure of a single message and a chat session
 export interface ChatMessage {
   sender: 'user' | 'bot';
   text: string;
@@ -26,18 +25,41 @@ interface ChatContextType {
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export function ChatProvider({ children }: { children: ReactNode }) {
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [sessions, setSessions] = useState<ChatSession[]>(() => {
+    const saved = localStorage.getItem('legal_ai_sessions');
+    return saved ? JSON.parse(saved) : [];
+  });
+  
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isTyping, setIsTyping] = useState(false);
 
-  const createNewSession = () => {
-    const newSession: ChatSession = {
-      id: Date.now().toString(),
-      title: 'New Consultation',
-      messages: [],
-    };
-    setSessions(prev => [newSession, ...prev]);
-    setActiveSessionId(newSession.id);
+  useEffect(() => {
+    localStorage.setItem('legal_ai_sessions', JSON.stringify(sessions));
+  }, [sessions]);
+
+  const createNewSession = async () => {
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+      // Pass user_id query parameter as required by backend route definition
+      const response = await fetch(`${API_BASE}/?user_id=jonh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'New Consultation' })
+      });
+
+      if (!response.ok) throw new Error('Failed to create session on backend');
+      
+      const newSessionData = await response.json();
+      const newSession: ChatSession = {
+        id: newSessionData.id,
+        title: newSessionData.title,
+        messages: [],
+      };
+      setSessions(prev => [newSession, ...prev]);
+      setActiveSessionId(newSession.id);
+    } catch (error) {
+      console.error("Error creating session:", error);
+    }
   };
 
   const switchSession = (id: string) => {
@@ -54,42 +76,125 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   };
 
   const sendMessage = async (text: string) => {
-    if (!activeSessionId) return;
-
-    // Add user message to the active session
-    setSessions(prevSessions => 
-      prevSessions.map(session => {
-        if (session.id === activeSessionId) {
-          // Auto-generate a title based on the first question
-          const newTitle = session.messages.length === 0 ? text.substring(0, 30) + '...' : session.title;
-          return {
-            ...session,
-            title: newTitle,
-            messages: [...session.messages, { sender: 'user', text }]
-          };
-        }
-        return session;
-      })
-    );
-
-    setIsTyping(true);
+    let currentSessionId = activeSessionId;
 
     try {
-      // Simulate backend NLP processing delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      const mockResponse = `Based on general legal principles regarding your query: \n\n* **Point 1:** This is a context-aware mock response.\n* **Point 2:** Your conversation history is being stored correctly.\n\n_Note: This fulfills the requirements for Module 5._`;
-      
-      // Add AI response to the active session
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+
+      // 1. Auto-create session in database if none is active
+      if (!currentSessionId) {
+        const createRes = await fetch(`${API_BASE}/?user_id=jonh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: text.substring(0, 30) + '...' })
+        });
+        
+        if (!createRes.ok) throw new Error('Failed to create chat session on backend.');
+        
+        const newSessionData = await createRes.json();
+        currentSessionId = newSessionData.id;
+
+        const newSession: ChatSession = {
+          id: currentSessionId,
+          title: newSessionData.title,
+          messages: [],
+        };
+        setSessions(prev => [newSession, ...prev]);
+        setActiveSessionId(currentSessionId);
+      }
+
+      const targetSessionId = currentSessionId;
+
+      // 2. Add user message to UI immediately
+      setSessions(prevSessions => 
+        prevSessions.map(session => {
+          if (session.id === targetSessionId) {
+            return {
+              ...session,
+              messages: [...session.messages, { sender: 'user', text }]
+            };
+          }
+          return session;
+        })
+      );
+
+      setIsTyping(true);
+
+      // Add temporary empty bot message for stream population
       setSessions(prevSessions => 
         prevSessions.map(session => 
-          session.id === activeSessionId 
-            ? { ...session, messages: [...session.messages, { sender: 'bot', text: mockResponse }] }
+          session.id === targetSessionId 
+            ? { ...session, messages: [...session.messages, { sender: 'bot', text: '' }] }
             : session
         )
       );
+
+      // 3. Request streaming response from backend
+      const response = await fetch(`${API_BASE}/message/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: targetSessionId,
+          query: text
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to connect to the Legal AI streaming endpoint.');
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedText = "";
+
+      if (reader) {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const dataStr = line.replace('data: ', '').trim();
+              if (dataStr === '[DONE]') break;
+
+              try {
+                const parsed = JSON.parse(dataStr);
+                if (parsed.text) {
+                  accumulatedText += parsed.text;
+                  setSessions(prevSessions => 
+                    prevSessions.map(session => {
+                      if (session.id === targetSessionId) {
+                        const updatedMessages = [...session.messages];
+                        updatedMessages[updatedMessages.length - 1] = { sender: 'bot', text: accumulatedText };
+                        return { ...session, messages: updatedMessages };
+                      }
+                      return session;
+                    })
+                  );
+                }
+              } catch (e) {
+                // Ignore partial chunks
+              }
+            }
+          }
+        }
+      }
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Streaming Connection Error:", error);
+      const errorResponse = "⚠️ **Connection Error:** Failed to stream response from backend.";
+      setSessions(prevSessions => 
+        prevSessions.map(session => {
+          if (session.id === activeSessionId) {
+            const updatedMessages = [...session.messages];
+            updatedMessages[updatedMessages.length - 1] = { sender: 'bot', text: errorResponse };
+            return { ...session, messages: updatedMessages };
+          }
+          return session;
+        })
+      );
     } finally {
       setIsTyping(false);
     }
@@ -104,7 +209,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// Custom hook to easily consume the context
 export function useChatContext() {
   const context = useContext(ChatContext);
   if (!context) throw new Error('useChatContext must be used within a ChatProvider');
