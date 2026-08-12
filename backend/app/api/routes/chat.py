@@ -88,11 +88,11 @@ def send_message(
     retrieved_results = retriever.retrieve(payload.query)
 
     # 6. Extract unique source filenames
-    sources = []
-    for item in retrieved_results:
-        chunk = item[0] if isinstance(item, (tuple, list)) else item
-        if hasattr(chunk, "filename") and chunk.filename:
-            sources.append(chunk.filename)
+    # sources = []
+    # for item in retrieved_results:
+    #     chunk = item[0] if isinstance(item, (tuple, list)) else item
+    #     if hasattr(chunk, "filename") and chunk.filename:
+    #         sources.append(chunk.filename)
 
     # 7. Build Prompt using chat_prompt_builder
     prompt = PromptBuilder.build(
@@ -114,7 +114,7 @@ def send_message(
         session_id=payload.session_id,
         sender="assistant",
         text=llm_response,
-        sources=list(set(sources))
+        # sources=list(set(sources))
     )
 
     # If your ChatMessageResponse Pydantic schema contains latency_seconds, set it dynamically:
@@ -163,12 +163,12 @@ async def send_message_stream(
     retrieved_results = retriever.retrieve(payload.query)
 
     # 6. Extract unique source filenames
-    sources = []
-    for item in retrieved_results:
-        chunk = item[0] if isinstance(item, (tuple, list)) else item
-        if hasattr(chunk, "filename") and chunk.filename:
-            sources.append(chunk.filename)
-    unique_sources = list(set(sources))
+    # sources = []
+    # for item in retrieved_results:
+    #     chunk = item[0] if isinstance(item, (tuple, list)) else item
+    #     if hasattr(chunk, "filename") and chunk.filename:
+    #         sources.append(chunk.filename)
+    # unique_sources = list(set(sources))
 
     # 7. Build Prompt
     prompt = PromptBuilder.build(
@@ -200,7 +200,7 @@ async def send_message_stream(
                 session_id=payload.session_id,
                 sender="assistant",
                 text=complete_response,
-                sources=unique_sources
+                # sources=unique_sources
             )
         finally:
             stream_db.close()
@@ -208,7 +208,9 @@ async def send_message_stream(
         print(f"[Performance Streaming] Full stream completed for session {payload.session_id} in {latency_seconds}s")
 
         # Send final completion event with sources and latency payload
-        yield f"data: {json.dumps({'sources': unique_sources, 'latency_seconds': latency_seconds, 'done': True})}\n\n"
+        yield f"data: {json.dumps({
+            # 'sources': unique_sources, 
+            'latency_seconds': latency_seconds, 'done': True})}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

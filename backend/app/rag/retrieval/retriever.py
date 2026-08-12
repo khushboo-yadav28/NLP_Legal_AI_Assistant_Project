@@ -80,16 +80,16 @@ class Retriever:
             top_k=FINAL_TOP_K
         )
 
-        print("TOP 5 FINAL DATA \n")
-        for item in results:
-            # Safely unpack depending on how your diversifier formats output
-            chunk = item[0]
-            score = item[2] if len(item) > 2 else item[1]
-            print(f"Chunk_index : {chunk.chunk_index}")
-            print(f"Chunk Category : {chunk.category}")
-            print(f"Filename : {chunk.filename}")
-            print(f"Reranker Score : {score}")
-            print(f"Chunk text : \n{chunk.text}")
-            print("=" * 50)
+        # print("TOP 4 FINAL DATA \n")
+        # for item in results:
+        #     # Safely unpack depending on how your diversifier formats output
+        #     chunk = item[0]
+        #     score = item[2] if len(item) > 2 else item[1]
+        #     print(f"Chunk_index : {chunk.chunk_index}")
+        #     print(f"Chunk Category : {chunk.category}")
+        #     print(f"Filename : {chunk.filename}")
+        #     print(f"Reranker Score : {score}")
+        #     print(f"Chunk text : \n{chunk.text}")
+        #     print("=" * 50)
 
         return results

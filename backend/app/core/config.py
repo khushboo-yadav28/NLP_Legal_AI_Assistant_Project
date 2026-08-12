@@ -25,6 +25,6 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 LLM_MODEL = os.getenv("LLM_MODEL","gemini-3.5-flash-lite")
 
-LLM_TEMPERATURE = os.getenv("LLM_TEMPERATURE","0.3")
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE","0.3"))
 
-LLM_MAX_OUTPUT_TOKENS = os.getenv("LLM_MAX_OUTPUT_TOKENS","300")
+LLM_MAX_OUTPUT_TOKENS = int(os.getenv("LLM_MAX_OUTPUT_TOKENS","300"))
