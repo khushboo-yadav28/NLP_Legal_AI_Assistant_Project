@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import DATABASE_URL
 
+DATABASE_URL = "postgresql+psycopg2://postgres:mysecretpassword@localhost:5433/legal_assistant"
 engine = create_engine(DATABASE_URL,echo=False)
 
 SessionLocal = sessionmaker(

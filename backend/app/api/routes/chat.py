@@ -16,7 +16,8 @@ from app.models.chat import (
 from app.rag.generation.chat_prompt_builder import PromptBuilder
 from app.rag.retrieval.retriever import Retriever
 
-router = APIRouter(prefix="/chats", tags=["Legal Chat & Consultations"])
+#router = APIRouter(prefix="/chats", tags=["Legal Chat & Consultations"])
+router = APIRouter(tags=["Legal Chat & Consultations"])
 
 
 @router.post("/", response_model=ChatSessionResponse, status_code=status.HTTP_201_CREATED)

@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.rag.embeddings.embedding_model import EmbeddingModel
 from app.rag.generation.llm import GeminiClient
 from app.rag.retrieval.reranker import Reranker
@@ -20,4 +21,14 @@ async def lifespan(app: FastAPI):
     print("Shutting down application...")
 
 app = FastAPI(title="Legal AI India API", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+# -------------------------------
+
 app.include_router(chat_router, prefix="/api")
+#app.include_router(chat_router, prefix="/api")
