@@ -7,14 +7,42 @@ export default function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
   const navigate = useNavigate();
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (name && email && password) {
-      // Save the name to local storage before navigating
-      localStorage.setItem('legal_ai_user_name', name);
-      navigate('/chat');
+    setErrorMsg('');
+
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+
+    try {
+      // 1. Send registration request to your FastAPI backend
+      const response = await fetch(`${API_BASE}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email,
+          password: password,
+          full_name: name
+        })
+      });
+
+      const data = await response.json();
+
+      // 2. Handle errors if registration fails (e.g., email already exists)
+      if (!response.ok) {
+        throw new Error(data.detail || 'Registration failed.');
+      }
+
+      // 3. Automatically log the user in by saving session details after successful registration
+      localStorage.setItem('legal_ai_user', JSON.stringify(data));
+      localStorage.setItem('legal_ai_user_name', data.full_name || name);
+
+      // 4. Navigate into the chat dashboard
+      navigate('/chat', { replace: true });
+    } catch (err: any) {
+      setErrorMsg(err.message || 'An error occurred during registration.');
     }
   };
 
@@ -30,6 +58,12 @@ export default function Register() {
         </div>
 
         <div className="p-8">
+          {errorMsg && (
+            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs font-medium mb-4 border border-red-100 text-center">
+              {errorMsg}
+            </div>
+          )}
+
           <form onSubmit={handleRegister} className="space-y-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name</label>

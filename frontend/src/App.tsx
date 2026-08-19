@@ -4,11 +4,11 @@ import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import ChatWindow from './components/chat/ChatWindow';
 import Login from './components/auth/Login';
 import Register from './components/auth/Register';
-import { Scale, Plus, User as UserIcon, MessageSquare, Edit2, Check, Menu, X, LogOut } from 'lucide-react';
+import { Scale, Plus, MessageSquare, Edit2, Check, Menu, X, LogOut, Trash2 } from 'lucide-react';
 import { useChatContext } from './context/ChatContext';
 
 function ChatLayout() {
-  const { sessions, activeSessionId, createNewSession, switchSession, updateSessionTitle } = useChatContext();
+  const { sessions, activeSessionId, createNewSession, switchSession, updateSessionTitle, deleteSession } = useChatContext();
   const navigate = useNavigate();
   
   // Mobile menu and profile state
@@ -20,8 +20,23 @@ function ChatLayout() {
   const [editTitle, setEditTitle] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   
-  // User Data from Local Storage
-  const userName = localStorage.getItem('legal_ai_user_name') || 'Guest User';
+  // Strict User Authentication Check from Local Storage
+  const [currentUser, setCurrentUser] = useState<{ full_name?: string; email?: string } | null>(null);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem('legal_ai_user');
+    if (!storedUser) {
+      navigate('/login', { replace: true });
+    } else {
+      try {
+        setCurrentUser(JSON.parse(storedUser));
+      } catch (e) {
+        navigate('/login', { replace: true });
+      }
+    }
+  }, [navigate]);
+
+  const userName = currentUser?.full_name || currentUser?.email || 'User';
   const userInitial = userName.charAt(0).toUpperCase();
 
   // Create initial session if empty
@@ -57,8 +72,9 @@ function ChatLayout() {
 
   // Logout Handler
   const handleLogout = () => {
+    localStorage.removeItem('legal_ai_user');
     localStorage.removeItem('legal_ai_user_name');
-    navigate('/login');
+    navigate('/login', { replace: true });
   };
 
   return (
@@ -92,7 +108,7 @@ function ChatLayout() {
           <button 
             onClick={() => {
               createNewSession();
-              setIsMobileMenuOpen(false); // Close mobile menu after clicking
+              setIsMobileMenuOpen(false);
             }} 
             className="w-full flex items-center justify-center gap-2 bg-brand-blue text-white py-3 rounded-lg hover:bg-opacity-90 transition font-medium"
           >
@@ -110,7 +126,7 @@ function ChatLayout() {
                 key={session.id}
                 onClick={() => {
                   switchSession(session.id);
-                  setIsMobileMenuOpen(false); // Close sidebar on mobile when switching
+                  setIsMobileMenuOpen(false);
                 }}
                 className={`w-full text-left p-3 rounded-lg flex items-center justify-between transition cursor-pointer group ${
                   activeSessionId === session.id 
@@ -121,7 +137,6 @@ function ChatLayout() {
                 <div className="flex items-center gap-3 overflow-hidden flex-1">
                   <MessageSquare className="w-4 h-4 flex-shrink-0" />
                   
-                  {/* Toggle between Input and Text Span */}
                   {editingId === session.id ? (
                     <input
                       ref={inputRef}
@@ -138,18 +153,30 @@ function ChatLayout() {
                   )}
                 </div>
 
-                {/* Edit Button (Visible on active session or hover) */}
-                {activeSessionId === session.id && editingId !== session.id && (
+                {/* Action Buttons: Edit and Delete */}
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                  {activeSessionId === session.id && editingId !== session.id && (
+                    <button 
+                      onClick={(e) => handleEditStart(e, session.id, session.title)}
+                      className="p-1 text-gray-400 hover:text-brand-blue transition"
+                      title="Rename"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  )}
+                  {editingId === session.id && (
+                    <Check className="w-4 h-4 text-green-600" />
+                  )}
+                  
+                  {/* Delete Button */}
                   <button 
-                    onClick={(e) => handleEditStart(e, session.id, session.title)}
-                    className="p-1 text-gray-400 hover:text-brand-blue transition"
+                    onClick={(e) => deleteSession(session.id, e)}
+                    className="p-1 text-gray-400 hover:text-red-600 transition"
+                    title="Delete chat"
                   >
-                    <Edit2 className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
-                )}
-                {editingId === session.id && (
-                  <Check className="w-4 h-4 text-green-600" />
-                )}
+                </div>
               </div>
             ))}
           </div>
@@ -157,9 +184,8 @@ function ChatLayout() {
         
         {/* Interactive User Profile with Logout */}
         <div className="relative mt-auto border-t border-gray-200">
-          {/* Pop-up Logout Menu */}
           {isProfileMenuOpen && (
-            <div className="absolute bottom-full left-0 w-full p-2 bg-white border-t border-gray-200 shadow-lg animate-message">
+            <div className="absolute bottom-full left-0 w-full p-2 bg-white border-t border-gray-200 shadow-lg">
               <button 
                 onClick={handleLogout}
                 className="w-full flex items-center gap-3 p-3 text-red-600 hover:bg-red-50 rounded-lg transition font-medium"
@@ -187,7 +213,7 @@ function ChatLayout() {
         </div>
       </aside>
 
-      {/* Mobile Overlay Background (Closes menu when clicking outside) */}
+      {/* Mobile Overlay Background */}
       {isMobileMenuOpen && (
         <div 
           onClick={() => setIsMobileMenuOpen(false)}

@@ -6,17 +6,38 @@ import { Scale, Mail, Lock } from 'lucide-react';
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email && password) {
-      // Check if a name exists, otherwise use the first part of the email
-      const existingName = localStorage.getItem('legal_ai_user_name');
-      const displayName = existingName || email.split('@')[0];
+    setErrorMsg('');
+
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+
+    try {
+      // Call your backend's partner-built authentication endpoint
+      const response = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await response.json();
+
+      // If backend rejects credentials (e.g. 401 Unauthorized), throw error
+      if (!response.ok) {
+        throw new Error(data.detail || 'Invalid email or password.');
+      }
+
+      // Save user details securely from backend response
+      localStorage.setItem('legal_ai_user', JSON.stringify(data));
+      localStorage.setItem('legal_ai_user_name', data.full_name || email.split('@')[0]);
       
-      localStorage.setItem('legal_ai_user_name', displayName);
-      navigate('/chat');
+      // Redirect to chat on success
+      navigate('/chat', { replace: true });
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Login failed. Please check your credentials.');
     }
   };
 
@@ -37,6 +58,12 @@ export default function Login() {
         <div className="p-8">
           <h2 className="text-xl font-bold text-brand-blue mb-6 text-center">Account Login</h2>
           
+          {errorMsg && (
+            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs font-medium mb-4 border border-red-100 text-center">
+              {errorMsg}
+            </div>
+          )}
+
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Email Address</label>

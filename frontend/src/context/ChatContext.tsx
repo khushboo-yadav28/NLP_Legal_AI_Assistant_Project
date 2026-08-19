@@ -1,5 +1,5 @@
 // src/context/ChatContext.tsx
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 
 export interface ChatMessage {
   sender: 'user' | 'bot';
@@ -20,13 +20,24 @@ interface ChatContextType {
   switchSession: (id: string) => void;
   sendMessage: (text: string) => void;
   updateSessionTitle: (id: string, newTitle: string) => void;
+  deleteSession: (id: string, e: React.MouseEvent) => void;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export function ChatProvider({ children }: { children: ReactNode }) {
+  const getStorageKey = () => {
+    try {
+      const storedUser = localStorage.getItem('legal_ai_user');
+      const user = storedUser ? JSON.parse(storedUser) : null;
+      return user?.id ? `legal_ai_sessions_${user.id}` : 'legal_ai_sessions_guest';
+    } catch (e) {
+      return 'legal_ai_sessions_guest';
+    }
+  };
+
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
-    const saved = localStorage.getItem('legal_ai_sessions');
+    const saved = localStorage.getItem(getStorageKey());
     return saved ? JSON.parse(saved) : [];
   });
   
@@ -34,14 +45,27 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [isTyping, setIsTyping] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem('legal_ai_sessions', JSON.stringify(sessions));
+    localStorage.setItem(getStorageKey(), JSON.stringify(sessions));
   }, [sessions]);
+
+  const getCurrentUserId = () => {
+    try {
+      const storedUser = localStorage.getItem('legal_ai_user');
+      const user = storedUser ? JSON.parse(storedUser) : null;
+      return user?.id || null;
+    } catch (e) {
+      return null;
+    }
+  };
 
   const createNewSession = async () => {
     try {
+      const userId = getCurrentUserId();
+      if (!userId) return;
+
       const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
-      // Pass user_id query parameter as required by backend route definition
-      const response = await fetch(`${API_BASE}/?user_id=jonh`, {
+      
+      const response = await fetch(`${API_BASE}/?user_id=${userId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: 'New Consultation' })
@@ -75,18 +99,37 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  // Delete specific chat session function
+  const deleteSession = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent switching sessions when clicking delete
+    
+    setSessions(prevSessions => {
+      const updated = prevSessions.filter(s => s.id !== id);
+      
+      // If we deleted the currently active session, switch to the next available one or null
+      if (activeSessionId === id) {
+        setActiveSessionId(updated.length > 0 ? updated[0].id : null);
+      }
+      return updated;
+    });
+  };
+
   const sendMessage = async (text: string) => {
     let currentSessionId = activeSessionId;
 
     try {
+      const userId = getCurrentUserId();
+      if (!userId) return;
+
       const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
-      // 1. Auto-create session in database if none is active
+      // 1. Auto-create session if none active, naming it based on the first query (Gemini style)
       if (!currentSessionId) {
-        const createRes = await fetch(`${API_BASE}/?user_id=jonh`, {
+        const autoTitle = text.length > 25 ? text.substring(0, 25) + '...' : text;
+        const createRes = await fetch(`${API_BASE}/?user_id=${userId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: text.substring(0, 30) + '...' })
+          body: JSON.stringify({ title: autoTitle })
         });
         
         if (!createRes.ok) throw new Error('Failed to create chat session on backend.');
@@ -95,12 +138,23 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         currentSessionId = newSessionData.id;
 
         const newSession: ChatSession = {
-          id: currentSessionId,
-          title: newSessionData.title,
+          id: currentSessionId!,
+          title: autoTitle, // Automatically set title based on query
           messages: [],
         };
         setSessions(prev => [newSession, ...prev]);
         setActiveSessionId(currentSessionId);
+      } else {
+        // If it's a "New Consultation" and this is the first message, update the title automatically
+        setSessions(prevSessions =>
+          prevSessions.map(session => {
+            if (session.id === currentSessionId && session.title === 'New Consultation') {
+              const autoTitle = text.length > 25 ? text.substring(0, 25) + '...' : text;
+              return { ...session, title: autoTitle };
+            }
+            return session;
+          })
+        );
       }
 
       const targetSessionId = currentSessionId;
@@ -139,9 +193,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         })
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to connect to the Legal AI streaming endpoint.');
-      }
+      if (!response.ok) throw new Error('Failed to connect to streaming endpoint.');
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -184,17 +236,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error("Streaming Connection Error:", error);
-      const errorResponse = "⚠️ **Connection Error:** Failed to stream response from backend.";
-      setSessions(prevSessions => 
-        prevSessions.map(session => {
-          if (session.id === activeSessionId) {
-            const updatedMessages = [...session.messages];
-            updatedMessages[updatedMessages.length - 1] = { sender: 'bot', text: errorResponse };
-            return { ...session, messages: updatedMessages };
-          }
-          return session;
-        })
-      );
     } finally {
       setIsTyping(false);
     }
@@ -202,7 +243,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   return (
     <ChatContext.Provider value={{ 
-      sessions, activeSessionId, isTyping, createNewSession, switchSession, sendMessage, updateSessionTitle 
+      sessions, activeSessionId, isTyping, createNewSession, switchSession, sendMessage, updateSessionTitle, deleteSession 
     }}>
       {children}
     </ChatContext.Provider>
