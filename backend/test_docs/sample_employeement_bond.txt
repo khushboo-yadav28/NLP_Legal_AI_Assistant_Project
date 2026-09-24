@@ -1,0 +1,27 @@
+EMPLOYMENT BOND & NON-DISCLOSURE AGREEMENT
+
+This Employment Bond ("Agreement") is executed on this 1st day of October 2025 at Ahmedabad, Gujarat, India.
+
+BETWEEN:
+Apex Tech Solutions Pvt. Ltd., a company incorporated under the Companies Act, 2013, having its registered office at SG Highway, Ahmedabad (hereinafter referred to as the "Company").
+
+AND:
+Mr. Rahul Sharma, son of Mr. Rajesh Sharma, residing at Flat 402, Green Park Apartments, Vastrapur, Ahmedabad (hereinafter referred to as the "Employee").
+
+CLAUSE 1: OBLIGATION & SERVICE PERIOD
+1.1 The Employee agrees to serve the Company for a minimum continuous period of twenty-four (24) months starting from 1st October 2025.
+1.2 The Employee acknowledges that the Company will incur substantial expenses exceeding INR 1,500,000 for specialized training in Software Development during the initial 3 months.
+
+CLAUSE 2: LIQUIDATED DAMAGES & BREACH
+2.1 If the Employee resigns, abandons, or terminates employment prior to completing the 24-month period, the Employee shall be liable to pay INR 200,000 as liquidated damages to compensate for training costs.
+2.2 The Employee agrees that this amount is a reasonable pre-estimate of loss under Section 74 of the Indian Contract Act, 1872.
+
+CLAUSE 3: JURISDICTION
+3.1 This Agreement shall be governed by and construed in accordance with the laws of India.
+3.2 Any dispute arising out of or in connection with this Agreement shall be subject to the exclusive jurisdiction of the Courts at Ahmedabad, Gujarat.
+
+IN WITNESS WHEREOF, the parties hereto have signed this Agreement on the date first mentioned above.
+
+Signed by Company: [Apex Tech Solutions]
+Signed by Employee: [Rahul Sharma]
+Witness 1: [Amit Patel]

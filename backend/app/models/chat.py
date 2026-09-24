@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict
+import json
+
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from typing import Optional, List
 from datetime import datetime
 
@@ -21,6 +23,14 @@ class ChatSessionResponse(BaseModel):
 class SendMessageRequest(BaseModel):
     session_id: str  # The specific "Main Chat" the user is currently inside
     query: str       # The new question or follow-up question
+
+    @field_validator("query", mode="before")
+    @classmethod
+    def sanitize_query_text(cls, value: str) -> str:
+        if isinstance(value, str):
+            # Normalization of raw control characters, newlines, or carriage returns
+            return value.replace("\r\n", "\n").replace("\r", "\n")
+        return value
 
 class ChatMessageResponse(BaseModel):
     id: str

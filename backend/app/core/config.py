@@ -23,8 +23,10 @@ FINAL_TOP_K = int(os.getenv("FINAL_TOP_K", 4))
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-LLM_MODEL = os.getenv("LLM_MODEL","gemini-3.5-flash-lite")
+LLM_MODEL = os.getenv("LLM_MODEL","gemini-3.7-flash")
+LLM_FALLBACK_MODEL = os.getenv("LLM_FALLBACK_MODEL", "gemini-3.6-flash")
+LLM_LIGHT_FALLBACK_MODEL =  os.getenv("LLM_LIGHT_FALLBACK_MODEL","gemini-3.5-flash-lite")
 
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE","0.3"))
 
-LLM_MAX_OUTPUT_TOKENS = int(os.getenv("LLM_MAX_OUTPUT_TOKENS","300"))
+LLM_MAX_OUTPUT_TOKENS = int(os.getenv("LLM_MAX_OUTPUT_TOKENS","1500"))

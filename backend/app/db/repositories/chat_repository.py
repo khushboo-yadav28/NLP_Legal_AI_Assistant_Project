@@ -3,6 +3,8 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from app.db.user_chat_models import ChatSessionTable, ChatMessageTable, UserTable
 
+def utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 class ChatRepository:
     """
@@ -26,7 +28,7 @@ class ChatRepository:
     @staticmethod
     def create_session(db: Session, user_id: str, title: str = "New Consultation") -> ChatSessionTable:
         """Create a new chat session (thread) for a user."""
-        now = datetime.now(timezone.utc)
+        now = utc_now() #datetime.now(timezone.utc)
         session = ChatSessionTable(user_id=user_id, title=title,created_at=now,updated_at=now)
         db.add(session)
         db.commit()
@@ -80,7 +82,7 @@ class ChatRepository:
         # Update parent session's updated_at timestamp
         session = db.query(ChatSessionTable).filter(ChatSessionTable.id == session_id).first()
         if session:
-            session.updated_at = datetime.now(timezone.utc)
+            session.updated_at = utc_now() #datetime.now(timezone.utc)
 
         db.commit()
         db.refresh(message)
@@ -101,3 +103,40 @@ class ChatRepository:
         )
         # Reverse list back to chronological order (oldest -> newest)
         return list(reversed(messages))
+
+    @staticmethod
+    def update_session_cache(
+        db: Session, 
+        session_id: str, 
+        file_uri: str, 
+        cache_name: str, 
+        expires_at: datetime
+    ) -> Optional[ChatSessionTable]:
+        """Attach uploaded document cache references to the session."""
+
+        if expires_at and expires_at.tzinfo is not None:
+            expires_at = expires_at.astimezone(timezone.utc).replace(tzinfo=None)
+
+        session = db.query(ChatSessionTable).filter(ChatSessionTable.id == session_id).first()
+        if session:
+            session.uploaded_file_uri = file_uri
+            session.gemini_cache_name = cache_name
+            session.cache_expires_at = expires_at
+            session.updated_at = utc_now() #datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(session)
+        return session
+
+    @staticmethod
+    def append_file_uri(db: Session, session_id: str, file_uri: str) -> Optional[ChatSessionTable]:
+        """Appends a new Gemini file URI to the chat session's uploaded_file_uris array."""
+        session = db.query(ChatSessionTable).filter(ChatSessionTable.id == session_id).first()
+        if session:
+            # Re-assign or initialize list to trigger SQLAlchemy JSON mutation detection
+            current_uris = list(session.uploaded_file_uris or [])
+            if file_uri not in current_uris:
+                current_uris.append(file_uri)
+                session.uploaded_file_uris = current_uris
+                db.commit()
+                db.refresh(session)
+        return session

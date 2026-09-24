@@ -38,6 +38,9 @@ class ChatSessionTable(Base):
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
+    # uploaded_file_uri = Column(String(255), nullable=True)  # Store Gemini file name/uri
+    uploaded_file_uris = Column(JSON, default=list, nullable=False)
+    
     # Relationships
     user = relationship("UserTable", back_populates="chat_sessions")
     messages = relationship(
