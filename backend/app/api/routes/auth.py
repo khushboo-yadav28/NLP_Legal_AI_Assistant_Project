@@ -25,23 +25,6 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     )
     return new_user
 
-# @router.post("/login", response_model=UserResponse)
-# def login(payload: UserLogin, db: Session = Depends(get_db)):
-#     # 1. Fetch user by email from database
-#     user = AuthRepository.get_user_by_email(db, email=payload.email)
-    
-#     # 2. Check if user exists AND verify that the password matches the hash
-#     if not user or not AuthRepository.verify_password(payload.password, user.hashed_password):
-#         raise HTTPException(
-#             status_code=status.HTTP_401_UNAUTHORIZED,
-#             detail="Invalid email or password."
-#         )
-    
-#     # 3. Return user info only if validation succeeds
-#     return user
-#     # 4. Return user info if successful
-#     return user
-
 @router.post("/login", response_model=TokenResponse)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     # OAuth2PasswordRequestForm maps the form field 'username' to email in your DB

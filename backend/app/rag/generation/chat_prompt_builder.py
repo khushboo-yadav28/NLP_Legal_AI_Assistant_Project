@@ -38,42 +38,6 @@ class PromptBuilder:
 
         return "\n".join(formatted_turns)
 
-#     @classmethod
-#     def build(
-#         cls,
-#         query: str,
-#         results: list,  # list of tuples or objects containing ChunkTable
-#         history: Optional[List[ChatMessageTable]] = None
-#     ) -> str:
-#         """
-#         Builds the final prompt passed to Gemini.
-#         """
-#         context_blocks = []
-
-#         # 1. Format Retrieved Chunks
-#         for index, item in enumerate(results, start=1):
-#             chunk = item[0] if isinstance(item, (tuple, list)) else item
-            
-#             category_info = f" (Category: {chunk.category})" if hasattr(chunk, 'category') and chunk.category else ""
-#             context_blocks.append(
-#                 f"[DOCUMENT {index}]: {chunk.filename}{category_info}\n{chunk.text.strip()}"
-#             )
-        
-#         context = "\n\n---\n\n".join(context_blocks) if context_blocks else "No relevant legal context found."
-
-#         # 2. Format History (if provided)
-#         history_str = cls.format_history(history or [])
-#         history_section = f"\nRecent Conversation History:\n{history_str}\n" if history_str else ""
-
-#         # 3. Assemble Prompt
-#         prompt = f"""Retrieved Legal Context:
-# {context}
-# {history_section}
-# User Question:
-# {query}
-
-# Answer:"""
-#         return prompt
 
     @classmethod
     def build_hybrid(
