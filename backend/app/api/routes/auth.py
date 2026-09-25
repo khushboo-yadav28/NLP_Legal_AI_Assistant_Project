@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.user import UserCreate, UserLogin, UserResponse
+from app.models.user import TokenResponse, UserCreate, UserLogin, UserResponse
 from app.db.repositories.auth_repository import AuthRepository
+from app.core.security import create_access_token
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -23,19 +25,38 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     )
     return new_user
 
-@router.post("/login", response_model=UserResponse)
-def login(payload: UserLogin, db: Session = Depends(get_db)):
-    # 1. Fetch user by email from database
-    user = AuthRepository.get_user_by_email(db, email=payload.email)
+# @router.post("/login", response_model=UserResponse)
+# def login(payload: UserLogin, db: Session = Depends(get_db)):
+#     # 1. Fetch user by email from database
+#     user = AuthRepository.get_user_by_email(db, email=payload.email)
     
-    # 2. Check if user exists AND verify that the password matches the hash
-    if not user or not AuthRepository.verify_password(payload.password, user.hashed_password):
+#     # 2. Check if user exists AND verify that the password matches the hash
+#     if not user or not AuthRepository.verify_password(payload.password, user.hashed_password):
+#         raise HTTPException(
+#             status_code=status.HTTP_401_UNAUTHORIZED,
+#             detail="Invalid email or password."
+#         )
+    
+#     # 3. Return user info only if validation succeeds
+#     return user
+#     # 4. Return user info if successful
+#     return user
+
+@router.post("/login", response_model=TokenResponse)
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    # OAuth2PasswordRequestForm maps the form field 'username' to email in your DB
+    user = AuthRepository.get_user_by_email(db, email=form_data.username)
+    
+    if not user or not AuthRepository.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password."
         )
     
-    # 3. Return user info only if validation succeeds
-    return user
-    # 4. Return user info if successful
-    return user
+    access_token = create_access_token(data={"sub": str(user.id)})
+    
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user=UserResponse.model_validate(user)
+    )

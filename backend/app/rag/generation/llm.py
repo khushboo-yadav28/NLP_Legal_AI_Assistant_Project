@@ -41,6 +41,9 @@ Rules:
 3. Seamless Tone: Do NOT mention, state, or imply that context was missing, incomplete, or retrieved from an index chunk. Never say "I couldn't find enough information" or "The provided context is partial".
 4. Language Style: Rewrite complex legalese into clear, concise, everyday English. Answer directly first.
 5. Domain Guardrail: Answer ONLY questions related to law, contracts, statutes, and legal procedures. Politely decline non-legal requests without citing any sources or adding a "Sources:" section.
+6. Template Generation Guardrail: When asked to draft a legal agreement, bond, lease, application, or notice, generate a comprehensive, professional and ready-to-use template compliant with Indian legal standards (incorporating proper clauses,formal headings,blank placeholders, execution blocks, and governing Indian jurisdiction). 
+   - **Crucial:** Skip the "Sources:" section entirely when generating templates.
+   - **Crucial:** Override standard length limits for templates to ensure the draft is complete and usable.
 Length & Format Constraints:
 - Keep responses concise, targeted, and scannable (around 150-250 words maximum).
 - Structure: Combine a short introductory paragraph with 3-4 key bullet points.
@@ -190,7 +193,7 @@ Length & Format Constraints:
 
         except Exception as e:
             # Handle corrupt/expired file URI fallback automatically
-            if "400" in str(e) and file_uri and len(contents) > 1:
+            if "400" in str(e) and file_uris and len(contents) > 1:
                 print(f"[LLM Warning] 400 Invalid Argument on file. Retrying prompt-only...")
                 response_stream = self.client.models.generate_content_stream(
                     model=model_name,

@@ -6,7 +6,8 @@ from app.db.database import Base
 
 def utc_now():
     """Returns dynamic UTC datetime for SQLAlchemy defaults."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    # return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(timezone.utc)
 
 class UserTable(Base):
     """

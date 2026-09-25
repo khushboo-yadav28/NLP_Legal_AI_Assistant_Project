@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.db.user_chat_models import ChatSessionTable, ChatMessageTable, UserTable
 
 def utc_now():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(timezone.utc)
 
 class ChatRepository:
     """
@@ -104,6 +104,17 @@ class ChatRepository:
         # Reverse list back to chronological order (oldest -> newest)
         return list(reversed(messages))
 
+    @staticmethod
+    def get_all_session_messages(db: Session, session_id: str):
+        """Fetches ALL messages for a chat session in chronological order for UI rendering."""
+        messages = (
+            db.query(ChatMessageTable)
+             .filter(ChatMessageTable.session_id == session_id)
+             .order_by(ChatMessageTable.created_at.asc())
+             .all()
+        )   
+        return messages
+    
     @staticmethod
     def update_session_cache(
         db: Session, 

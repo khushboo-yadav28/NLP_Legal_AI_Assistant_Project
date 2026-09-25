@@ -456,6 +456,8 @@ from app.models.chat import (
 )
 from app.rag.generation.chat_prompt_builder import PromptBuilder
 from app.rag.retrieval.retriever import Retriever
+from app.core.security import get_current_user
+from app.models.user import User
 
 router = APIRouter(tags=["Legal Chat & Consultations"])
 
@@ -463,28 +465,30 @@ router = APIRouter(tags=["Legal Chat & Consultations"])
 @router.post("/", response_model=ChatSessionResponse, status_code=status.HTTP_201_CREATED)
 def create_chat_session(
     payload: ChatSessionCreate,
-    user_id: str,  # In production, extract this from auth token
+    current_user: User = Depends(get_current_user),
+    # user_id: str,  # In production, extract this from auth token
     db: Session = Depends(get_db)
 ):
     """Creates a new Chat Session (Sidebar item)."""
-    session = ChatRepository.create_session(db=db, user_id=user_id, title=payload.title)
+    session = ChatRepository.create_session(db=db, user_id=str(current_user.id), title=payload.title)
     return session
 
 
 @router.get("/", response_model=List[ChatSessionResponse])
 def list_user_sessions(
-    user_id: str,  # In production, extract this from auth token
+    # user_id: str,  # In production, extract this from auth token
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Fetches all main chat sessions for the logged-in user."""
-    user = ChatRepository.get_user_by_id(db=db, user_id=user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail=f"User '{user_id}' not found."
-        )
+    # user = ChatRepository.get_user_by_id(db=db, user_id=str(current_user.id))
+    # if not user:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_404_NOT_FOUND, 
+    #         detail=f"User '{str(current_user.id)}' not found."
+    #     )
         
-    sessions = ChatRepository.get_user_sessions(db=db, user_id=user_id)
+    sessions = ChatRepository.get_user_sessions(db=db, user_id=str(current_user.id))
     return sessions
 
 
@@ -493,7 +497,8 @@ async def upload_document_and_cache(
     request: Request,
     file: UploadFile = File(...),
     session_id: Optional[str] = Form(None),
-    user_id: str = Form(...),  # In production, extract from current_user
+    current_user: User = Depends(get_current_user),
+    # user_id: str = Form(...),  # In production, extract from current_user
     db: Session = Depends(get_db)
 ):
     """
@@ -509,7 +514,7 @@ async def upload_document_and_cache(
             raise HTTPException(status_code=404, detail="Chat session not found")
     else:
         title = f"Document: {file.filename[:30]}"
-        session = ChatRepository.create_session(db=db, user_id=user_id, title=title)
+        session = ChatRepository.create_session(db=db, user_id=str(current_user.id), title=title)
 
     # 2. Save Uploaded File to Temp Directory
     temp_file_path = None
@@ -556,77 +561,155 @@ async def upload_document_and_cache(
 
     return session
 
+# ===================WORKING BEFORE JWT TOKEN=======================
+# @router.post("/message/stream")
+# async def send_message_stream(
+#     request: Request,
+#     payload: SendMessageRequest,
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     Streams response via SSE using Gemini Context Caching.
+#     Handles Option A (Document Only) and Option B (Hybrid Doc + RAG statutory search).
+#     """
+#     start_time = time.perf_counter()
+
+#     # 1. Safely read raw stream bytes
+#     raw_bytes = await request.body()
+#     raw_str = raw_bytes.decode("utf-8", errors="ignore")
+
+#     # 2. Decode JSON (with fallback regex cleanup for raw unescaped newlines/tabs)
+#     try:
+#         data = json.loads(raw_str)
+#     except json.JSONDecodeError:
+#         # Escape unescaped control characters inside JSON strings
+#         sanitized_str = re.sub(r'(?<!\\)[\r\n]', r'\\n', raw_str)
+#         try:
+#             data = json.loads(sanitized_str)
+#         except Exception as err:
+#             raise HTTPException(
+#                 status_code=422,
+#                 detail=f"Invalid JSON payload syntax: {str(err)}"
+#             )
+
+#     # 3. Validate parsed dictionary with Pydantic
+#     try:
+#         payload = SendMessageRequest(**data)
+#     except Exception as err:
+#         raise HTTPException(
+#             status_code=422,
+#             detail=f"Validation error: {str(err)}"
+#         )
+
+#     # 1. Access pre-loaded models from app.state
+#     embedding_model = request.app.state.embedding_model
+#     llm_client = request.app.state.llm_client
+#     reranker = request.app.state.reranker
+
+#     # 2. Verify Chat Session
+#     session = ChatRepository.get_session_by_id(db, session_id=payload.session_id)
+#     if not session:
+#         raise HTTPException(status_code=404, detail="Chat session not found")
+
+#     file_uris: List[str] = getattr(session, "uploaded_file_uris", []) or []
+
+#     # file_uri = getattr(session, "uploaded_file_uri", None) or getattr(session, "gemini_file_uri", None) or getattr(session, "file_uri", None)
+
+#     # 3. Check Context Cache Validity
+#     # cached_content_name = None
+#     # now = datetime.now(timezone.utc)
+#     # now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+
+#     # if session.gemini_cache_name and session.cache_expires_at:
+#     #     # Ensure cache expiration timestamp is timezone-aware for comparison
+#     #     cache_exp = session.cache_expires_at
+#     #     if cache_exp.tzinfo is not None:
+#     #         cache_exp = cache_exp.astimezone(timezone.utc).replace(tzinfo=None)
+            
+#     #     if cache_exp > now_naive:
+#     #         cached_content_name = session.gemini_cache_name
+
+#     # has_doc_cache = bool(cached_content_name)
+
+#     # 4. Save User Message
+#     ChatRepository.add_message(
+#         db=db,
+#         session_id=payload.session_id,
+#         sender="user",
+#         text=payload.query
+#     )
+
+#     # 5. Fetch past conversation history
+#     history = ChatRepository.get_recent_messages(db, session_id=payload.session_id, limit=4)
+
+#     # 6. RAG Retrieval Strategy (Option A vs Option B)
+#     retrieved_results = []
+    
+#     # Retrieve statutory laws via RAG if cached context alone isn't enough or on follow-ups
+#     # (i.e. Option B, or when no document cache exists at all)
+#     # if not has_doc_cache or getattr(payload, "use_rag_fallback", False):  # `use_rag_fallback` optional flag in schema
+#     #     retriever = Retriever(db=db, embedding_model=embedding_model, reranker=reranker)
+#     #     retrieved_results = retriever.retrieve(payload.query)
+
+#     if not file_uris or getattr(payload, "use_rag_fallback", False):
+#         retriever = Retriever(db=db, embedding_model=embedding_model, reranker=reranker)
+#         retrieved_results = retriever.retrieve(payload.query)
+
+#     # 7. Build Hybrid Prompt
+#     prompt = PromptBuilder.build_hybrid(
+#         query=payload.query,
+#         rag_results=retrieved_results,
+#         history=history,
+#         has_attached_doc=bool(file_uris)
+#     )
+
+#     # ================= [DEBUG TERMINAL PRINTS] =================
+#     print("\n" + "=" * 60)
+#     print(" [DEBUG] SESSION ID:", payload.session_id)
+#     print(" [DEBUG] ATTACHED FILE URI:", file_uris)
+#     print(" [DEBUG] RETRIEVED RAG CHUNKS COUNT:", len(retrieved_results))
+#     if retrieved_results:
+#         print(" [DEBUG] RAG CONTENT PREVIEW:")
+#         for idx, item in enumerate(retrieved_results, 1):
+#             chunk = item[0] if isinstance(item, (tuple, list)) else item
+#             print(f"   --- Chunk {idx} ({getattr(chunk, 'filename', 'No File')}) ---")
+#             print(f"   {chunk.text[:300]}...\n")
+            
+#     print(" [DEBUG] ASSEMBLED PROMPT SENT TO GEMINI:")
+#     print("-" * 60)
+#     print(prompt)
+#     print("=" * 60 + "\n")
+    # ===========================================================
 
 @router.post("/message/stream")
 async def send_message_stream(
     request: Request,
-    payload: SendMessageRequest,
+    payload: SendMessageRequest,  # <-- Adding this brings back the Swagger UI JSON body box!
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Streams response via SSE using Gemini Context Caching.
-    Handles Option A (Document Only) and Option B (Hybrid Doc + RAG statutory search).
-    """
+    """Streams response via SSE while enforcing session ownership."""
     start_time = time.perf_counter()
 
-    # 1. Safely read raw stream bytes
-    raw_bytes = await request.body()
-    raw_str = raw_bytes.decode("utf-8", errors="ignore")
+    # Since SendMessageRequest is already validated and parsed by FastAPI via Pydantic,
+    # you no longer need manual raw_bytes json loads unless you want to keep your fallback regex.
+    # If you want to keep your regex safety fallback, you can inspect payload fields directly.
 
-    # 2. Decode JSON (with fallback regex cleanup for raw unescaped newlines/tabs)
-    try:
-        data = json.loads(raw_str)
-    except json.JSONDecodeError:
-        # Escape unescaped control characters inside JSON strings
-        sanitized_str = re.sub(r'(?<!\\)[\r\n]', r'\\n', raw_str)
-        try:
-            data = json.loads(sanitized_str)
-        except Exception as err:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Invalid JSON payload syntax: {str(err)}"
-            )
-
-    # 3. Validate parsed dictionary with Pydantic
-    try:
-        payload = SendMessageRequest(**data)
-    except Exception as err:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Validation error: {str(err)}"
-        )
-
-    # 1. Access pre-loaded models from app.state
-    embedding_model = request.app.state.embedding_model
-    llm_client = request.app.state.llm_client
-    reranker = request.app.state.reranker
-
-    # 2. Verify Chat Session
+    # 1. Verify Chat Session & Ownership
     session = ChatRepository.get_session_by_id(db, session_id=payload.session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found")
 
+    if str(session.user_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Unauthorized access to chat session")
+
+    # 2. Access pre-loaded models from app.state
+    embedding_model = request.app.state.embedding_model
+    llm_client = request.app.state.llm_client
+    reranker = request.app.state.reranker
     file_uris: List[str] = getattr(session, "uploaded_file_uris", []) or []
 
-    # file_uri = getattr(session, "uploaded_file_uri", None) or getattr(session, "gemini_file_uri", None) or getattr(session, "file_uri", None)
-
-    # 3. Check Context Cache Validity
-    # cached_content_name = None
-    # now = datetime.now(timezone.utc)
-    # now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
-
-    # if session.gemini_cache_name and session.cache_expires_at:
-    #     # Ensure cache expiration timestamp is timezone-aware for comparison
-    #     cache_exp = session.cache_expires_at
-    #     if cache_exp.tzinfo is not None:
-    #         cache_exp = cache_exp.astimezone(timezone.utc).replace(tzinfo=None)
-            
-    #     if cache_exp > now_naive:
-    #         cached_content_name = session.gemini_cache_name
-
-    # has_doc_cache = bool(cached_content_name)
-
-    # 4. Save User Message
+    # 3. Save User Message
     ChatRepository.add_message(
         db=db,
         session_id=payload.session_id,
@@ -634,47 +717,22 @@ async def send_message_stream(
         text=payload.query
     )
 
-    # 5. Fetch past conversation history
+    # 4. Fetch past conversation history
     history = ChatRepository.get_recent_messages(db, session_id=payload.session_id, limit=4)
 
-    # 6. RAG Retrieval Strategy (Option A vs Option B)
+    # 5. RAG Retrieval Strategy
     retrieved_results = []
-    
-    # Retrieve statutory laws via RAG if cached context alone isn't enough or on follow-ups
-    # (i.e. Option B, or when no document cache exists at all)
-    # if not has_doc_cache or getattr(payload, "use_rag_fallback", False):  # `use_rag_fallback` optional flag in schema
-    #     retriever = Retriever(db=db, embedding_model=embedding_model, reranker=reranker)
-    #     retrieved_results = retriever.retrieve(payload.query)
-
     if not file_uris or getattr(payload, "use_rag_fallback", False):
         retriever = Retriever(db=db, embedding_model=embedding_model, reranker=reranker)
         retrieved_results = retriever.retrieve(payload.query)
 
-    # 7. Build Hybrid Prompt
+    # 6. Build Hybrid Prompt
     prompt = PromptBuilder.build_hybrid(
         query=payload.query,
         rag_results=retrieved_results,
         history=history,
         has_attached_doc=bool(file_uris)
     )
-
-    # ================= [DEBUG TERMINAL PRINTS] =================
-    print("\n" + "=" * 60)
-    print(" [DEBUG] SESSION ID:", payload.session_id)
-    print(" [DEBUG] ATTACHED FILE URI:", file_uris)
-    print(" [DEBUG] RETRIEVED RAG CHUNKS COUNT:", len(retrieved_results))
-    if retrieved_results:
-        print(" [DEBUG] RAG CONTENT PREVIEW:")
-        for idx, item in enumerate(retrieved_results, 1):
-            chunk = item[0] if isinstance(item, (tuple, list)) else item
-            print(f"   --- Chunk {idx} ({getattr(chunk, 'filename', 'No File')}) ---")
-            print(f"   {chunk.text[:300]}...\n")
-            
-    print(" [DEBUG] ASSEMBLED PROMPT SENT TO GEMINI:")
-    print("-" * 60)
-    print(prompt)
-    print("=" * 60 + "\n")
-    # ===========================================================
 
     def event_stream():
         full_text = []
@@ -717,3 +775,20 @@ async def send_message_stream(
             yield f"data: {json.dumps({'error': str(err)})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+@router.get("/{session_id}/messages", response_model=List[ChatMessageResponse])
+def get_session_messages(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Fetches all past messages for a specific chat session in chronological order."""
+    session = ChatRepository.get_session_by_id(db, session_id=session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    
+    if str(session.user_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Unauthorized access to chat session")
+
+    # Use the dedicated repository method to pull all messages ordered ascendingly
+    return ChatRepository.get_all_session_messages(db, session_id=session_id)

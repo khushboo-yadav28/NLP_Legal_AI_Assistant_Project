@@ -1,7 +1,11 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
 from sqlalchemy import Column, String, DateTime
-from datetime import datetime
+from datetime import datetime, timezone
 from app.db.database import Base
+
+def utc_now():
+    """Returns dynamic UTC datetime for SQLAlchemy defaults."""
+    return datetime.now(timezone.utc)
 
 # ==================== SQLALCHEMY ORM MODEL ====================
 
@@ -13,7 +17,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=True)
     hashed_password = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
 # ==================== PYDANTIC SCHEMAS ====================
 
@@ -33,3 +37,8 @@ class UserResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse
