@@ -1,3 +1,4 @@
+// src/components/pages/AuthPage.tsx
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -14,33 +15,46 @@ export default function AuthPage() {
     setErrorMsg('');
     
     const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
-    const endpoint = isLogin ? '/auth/login' : '/auth/register';
-
-    const payload = isLogin 
-      ? { email, password } 
-      : { email, password, full_name: fullName };
 
     try {
-      const response = await fetch(`${API_BASE}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      console.log("Response Status:", response.status);
-      const data = await response.json();
-      console.log("Response Data:", data);
+      let response;
+      
+      if (isLogin) {
+        // OAuth2PasswordRequestForm requires form-urlencoded format
+        const formData = new URLSearchParams();
+        formData.append('username', email);
+        formData.append('password', password);
 
-      // If the backend returns an error status (like 401 or 500), throw it
+        response = await fetch(`${API_BASE}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: formData.toString()
+        });
+      } else {
+        response = await fetch(`${API_BASE}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, full_name: fullName })
+        });
+      }
+
+      const data = await response.json();
+
       if (!response.ok) {
         throw new Error(data.detail || 'Authentication failed. Please check your credentials.');
       }
 
-      // Only save user and proceed if backend explicitly validates and succeeds
-      localStorage.setItem('legal_ai_user', JSON.stringify(data));
-      navigate('/chat');
+      if (isLogin) {
+        // Save the token and user profile needed for authorized chat requests
+        localStorage.setItem('legal_ai_token', data.access_token);
+        localStorage.setItem('legal_ai_user', JSON.stringify(data.user));
+        navigate('/chat');
+      } else {
+        setIsLogin(true);
+        setErrorMsg('Registration successful! Please log in.');
+      }
       
     } catch (err: any) {
-      // Display the exact backend error (e.g. "Invalid email or password.") on the UI
       setErrorMsg(err.message || 'An error occurred during authentication.');
     }
   };

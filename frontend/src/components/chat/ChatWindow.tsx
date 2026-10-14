@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, Info, Mic, MicOff, FileText, Shield, Scale as ScaleIcon, Copy, Check, Square } from 'lucide-react';
+import { Send, Bot, Info, Mic, MicOff, FileText, Shield, Scale as ScaleIcon, Copy, Check, Square, Paperclip } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useChatContext } from '../../context/ChatContext';
 
@@ -11,11 +11,12 @@ declare global {
 }
 
 export default function ChatWindow() {
-  const { sessions, activeSessionId, isTyping, sendMessage } = useChatContext();
+  const { sessions, activeSessionId, isTyping, sendMessage, uploadDocument } = useChatContext();
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Typewriter Placeholder State
   const placeholders = [
@@ -36,18 +37,18 @@ export default function ChatWindow() {
   const handleCopy = (text: string, idx: number) => {
     navigator.clipboard.writeText(text);
     setCopiedIndex(idx);
-    setTimeout(() => setCopiedIndex(null), 2000); // Reset after 2 seconds
+    setTimeout(() => setCopiedIndex(null), 2000);
   };
   
   // Dynamic Typewriter Effect Logic
   useEffect(() => {
-    if (isListening) return; // Pause animation while microphone is active
+    if (isListening) return;
 
     const fullText = placeholders[placeholderIndex];
     let timer: ReturnType<typeof setTimeout>;
 
     if (!isDeleting && currentPlaceholder === fullText) {
-      timer = setTimeout(() => setIsDeleting(true), 2500); // Pause before deleting
+      timer = setTimeout(() => setIsDeleting(true), 2500);
     } else if (isDeleting && currentPlaceholder === '') {
       setIsDeleting(false);
       setPlaceholderIndex((prev) => (prev + 1) % placeholders.length);
@@ -94,6 +95,14 @@ export default function ChatWindow() {
     setInput('');
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      uploadDocument(file);
+      e.target.value = ''; // Reset input field
+    }
+  };
+
   const toggleListen = () => {
     if (isListening) {
       recognitionRef.current?.stop();
@@ -122,14 +131,14 @@ export default function ChatWindow() {
 
       <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 pb-32">
         
-        {/* The New, Creative Welcome State */}
+        {/* Welcome State */}
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full max-w-3xl mx-auto text-center animate-message mt-10">
             <div className="w-20 h-20 bg-brand-blue text-brand-gold rounded-2xl flex items-center justify-center shadow-lg mb-6 ">
               <ScaleIcon className="w-10 h-10" />
             </div>
             <h2 className="text-3xl font-serif font-bold text-brand-blue mb-3">What legal question can I clarify for you today?</h2>
-            <p className="text-gray-500 mb-10 max-w-xl">Ask any legal question in simple terms. Select a common scenario below to get started, or type your own query.</p>
+            <p className="text-gray-500 mb-10 max-w-xl">Ask any legal question in simple terms. Select a common scenario below, upload a document, or type your own query.</p>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
               {suggestionCards.map((card, idx) => (
@@ -149,7 +158,7 @@ export default function ChatWindow() {
           </div>
         )}
 
-        {/* Animated Message Bubbles */}
+        {/* Message Bubbles */}
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-message`}>
             {msg.sender === 'bot' && (
@@ -202,10 +211,29 @@ export default function ChatWindow() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Glassmorphism Input Area */}
+      {/* Input Area with Attachment Button */}
       <div className="absolute bottom-0 w-full bg-white/80 backdrop-blur-md border-t border-gray-200 p-4">
         <div className="max-w-4xl mx-auto relative flex items-center gap-2">
           
+          {/* Hidden File Input */}
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileChange} 
+            className="hidden" 
+            accept=".pdf,.txt,.doc,.docx"
+          />
+
+          {/* Attachment Button */}
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            title="Upload Legal Document"
+            className="p-4 rounded-xl transition shadow-sm bg-white border border-gray-200 text-gray-500 hover:text-brand-blue hover:border-brand-blue"
+          >
+            <Paperclip className="w-5 h-5" />
+          </button>
+
+          {/* Voice Input Button */}
           <button 
             onClick={toggleListen}
             className={`p-4 rounded-xl transition shadow-sm ${
@@ -217,6 +245,7 @@ export default function ChatWindow() {
             {isListening ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
           </button>
 
+          {/* Text Input Bar */}
           <div className="relative flex-1 shadow-sm rounded-xl">
             <input 
               type="text" 
@@ -227,16 +256,12 @@ export default function ChatWindow() {
               placeholder={isListening ? "Listening..." : `${currentPlaceholder}|`}
             />
             <button 
-  onClick={isTyping ? undefined : () => handleSend()} // (We will add true stop logic when connecting to the backend)
-  disabled={!isTyping && !input.trim()}
-  className={`absolute right-2 top-2 bottom-2 p-3 rounded-lg transition flex items-center justify-center ${
-    isTyping 
-      ? 'bg-red-100 text-red-600 hover:bg-red-200' 
-      : 'bg-brand-blue text-brand-gold hover:bg-[#152a5c] disabled:opacity-50'
-  }`}
->
-  {isTyping ? <Square className="w-5 h-5 fill-current" /> : <Send className="w-5 h-5" />}
-</button>
+              onClick={() => handleSend()}
+              disabled={!input.trim()}
+              className="absolute right-2 top-2 bottom-2 p-3 rounded-lg transition flex items-center justify-center bg-brand-blue text-brand-gold hover:bg-[#152a5c] disabled:opacity-50"
+            >
+              <Send className="w-5 h-5" />
+            </button>
           </div>
         </div>
       </div>

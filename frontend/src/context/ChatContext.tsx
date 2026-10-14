@@ -16,9 +16,10 @@ interface ChatContextType {
   sessions: ChatSession[];
   activeSessionId: string | null;
   isTyping: boolean;
-  createNewSession: () => void;
+  createNewSession: () => Promise<void>;
   switchSession: (id: string) => void;
-  sendMessage: (text: string) => void;
+  sendMessage: (text: string) => Promise<void>;
+  uploadDocument: (file: File) => Promise<void>;
   updateSessionTitle: (id: string, newTitle: string) => void;
   deleteSession: (id: string, e: React.MouseEvent) => void;
 }
@@ -64,10 +65,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (!userId) return;
 
       const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
-      
+      const token = localStorage.getItem('legal_ai_token');
+      if (!token) {
+        console.error("No authentication token found. Please log in.");
+        return;
+      }
+
       const response = await fetch(`${API_BASE}/?user_id=${userId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ title: 'New Consultation' })
       });
 
@@ -99,19 +108,104 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  // Delete specific chat session function
   const deleteSession = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent switching sessions when clicking delete
+    e.stopPropagation();
     
     setSessions(prevSessions => {
       const updated = prevSessions.filter(s => s.id !== id);
       
-      // If we deleted the currently active session, switch to the next available one or null
       if (activeSessionId === id) {
         setActiveSessionId(updated.length > 0 ? updated[0].id : null);
       }
       return updated;
     });
+  };
+
+  const uploadDocument = async (file: File) => {
+    let currentSessionId = activeSessionId;
+
+    try {
+      const token = localStorage.getItem('legal_ai_token');
+      if (!token) {
+        console.error("No authentication token found.");
+        return;
+      }
+
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+
+      // 1. Auto-create session if none active
+      if (!currentSessionId) {
+        const userId = getCurrentUserId();
+        if (!userId) return;
+
+        const autoTitle = file.name.length > 25 ? file.name.substring(0, 25) + '...' : file.name;
+        const createRes = await fetch(`${API_BASE}/?user_id=${userId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ title: autoTitle })
+        });
+
+        if (!createRes.ok) throw new Error('Failed to create session for upload.');
+        const newSessionData = await createRes.json();
+        currentSessionId = newSessionData.id;
+
+        const newSession: ChatSession = {
+          id: currentSessionId!,
+          title: autoTitle,
+          messages: [],
+        };
+        setSessions(prev => [newSession, ...prev]);
+        setActiveSessionId(currentSessionId);
+      }
+
+      const targetSessionId = currentSessionId;
+
+      // 2. Prepare FormData matching Swagger endpoint specification
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('session_id', targetSessionId!);
+
+      // 3. Post to /api/upload (Browser handles boundary automatically)
+      const response = await fetch(`${API_BASE}/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.detail || 'Failed to upload document.');
+      }
+
+      const uploadResult = await response.json();
+      console.log("Upload Success:", uploadResult);
+
+      // 4. Update UI chat log confirming the upload
+      setSessions(prevSessions => 
+        prevSessions.map(session => {
+          if (session.id === targetSessionId) {
+            return {
+              ...session,
+              messages: [
+                ...session.messages, 
+                { sender: 'user', text: `📎 Uploaded document: ${file.name}` },
+                { sender: 'bot', text: `Successfully uploaded **${file.name}** and cached context. How can I help you analyze this document?` }
+              ]
+            };
+          }
+          return session;
+        })
+      );
+
+    } catch (error: any) {
+      console.error("Document Upload Error:", error);
+      alert(error.message || 'Error uploading document');
+    }
   };
 
   const sendMessage = async (text: string) => {
@@ -122,13 +216,23 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (!userId) return;
 
       const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+      const token = localStorage.getItem('legal_ai_token');
+      if (!token) {
+        console.error("No authentication token found. Please log in.");
+        return;
+      }
 
-      // 1. Auto-create session if none active, naming it based on the first query (Gemini style)
+      const authHeaders = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      };
+
+      // 1. Auto-create session if none active
       if (!currentSessionId) {
         const autoTitle = text.length > 25 ? text.substring(0, 25) + '...' : text;
         const createRes = await fetch(`${API_BASE}/?user_id=${userId}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders,
           body: JSON.stringify({ title: autoTitle })
         });
         
@@ -139,13 +243,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
         const newSession: ChatSession = {
           id: currentSessionId!,
-          title: autoTitle, // Automatically set title based on query
+          title: autoTitle,
           messages: [],
         };
         setSessions(prev => [newSession, ...prev]);
         setActiveSessionId(currentSessionId);
       } else {
-        // If it's a "New Consultation" and this is the first message, update the title automatically
         setSessions(prevSessions =>
           prevSessions.map(session => {
             if (session.id === currentSessionId && session.title === 'New Consultation') {
@@ -183,10 +286,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         )
       );
 
-      // 3. Request streaming response from backend
+      // 3. Request streaming response from backend with Bearer token
       const response = await fetch(`${API_BASE}/message/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({
           session_id: targetSessionId,
           query: text
@@ -243,7 +346,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   return (
     <ChatContext.Provider value={{ 
-      sessions, activeSessionId, isTyping, createNewSession, switchSession, sendMessage, updateSessionTitle, deleteSession 
+      sessions, activeSessionId, isTyping, createNewSession, switchSession, sendMessage, uploadDocument, updateSessionTitle, deleteSession 
     }}>
       {children}
     </ChatContext.Provider>

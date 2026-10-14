@@ -6,38 +6,43 @@ import { Scale, Mail, Lock } from 'lucide-react';
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
+  const [errorMsg, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMsg('');
-
-    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+    setError(null);
 
     try {
-      // Call your backend's partner-built authentication endpoint
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+      
+      // OAuth2PasswordRequestForm expects form-urlencoded data with 'username' and 'password'
+      const formData = new URLSearchParams();
+      formData.append('username', email); // backend maps username to email
+      formData.append('password', password);
+
       const response = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData.toString(),
       });
 
-      const data = await response.json();
-
-      // If backend rejects credentials (e.g. 401 Unauthorized), throw error
       if (!response.ok) {
-        throw new Error(data.detail || 'Invalid email or password.');
+        const errData = await response.json();
+        throw new Error(errData.detail || 'Login failed');
       }
 
-      // Save user details securely from backend response
-      localStorage.setItem('legal_ai_user', JSON.stringify(data));
-      localStorage.setItem('legal_ai_user_name', data.full_name || email.split('@')[0]);
+      const data = await response.json();
       
-      // Redirect to chat on success
+      // Save user info & token to local storage as expected by your App.tsx
+      localStorage.setItem('legal_ai_user', JSON.stringify(data.user));
+      localStorage.setItem('legal_ai_token', data.access_token);
+      
       navigate('/chat', { replace: true });
     } catch (err: any) {
-      setErrorMsg(err.message || 'Login failed. Please check your credentials.');
+      setError(err.message || 'An error occurred during login');
     }
   };
 
