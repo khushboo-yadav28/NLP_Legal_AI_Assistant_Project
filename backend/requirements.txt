@@ -32,8 +32,11 @@ pydantic
 pydantic[email]
 python-multipart
 pyjwt
+python-docx
 
 # ==========================
 # LLM
 # ==========================
+google-genai
+
 google-genai

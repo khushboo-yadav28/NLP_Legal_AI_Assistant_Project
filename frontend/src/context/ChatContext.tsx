@@ -1,5 +1,6 @@
 // src/context/ChatContext.tsx
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { generateAndDownloadAffidavit, type AffidavitPayload } from '../services/documentService';
 
 export interface ChatMessage {
   sender: 'user' | 'bot';
@@ -22,6 +23,7 @@ interface ChatContextType {
   uploadDocument: (file: File) => Promise<void>;
   updateSessionTitle: (id: string, newTitle: string) => void;
   deleteSession: (id: string, e: React.MouseEvent) => void;
+  generateAffidavit: (payload: AffidavitPayload) => Promise<{ filename: string }>;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -344,9 +346,45 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const generateAffidavit = async (payload: AffidavitPayload) => {
+    const result = await generateAndDownloadAffidavit(payload);
+
+    if (activeSessionId) {
+      const typeTitles: Record<string, string> = {
+        name_change: 'Name Change Affidavit',
+        address_change: 'Address Change Affidavit',
+        dob_correction: 'Date of Birth Correction Affidavit',
+        relation_update: 'Parent/Spouse Name Correction Affidavit',
+        one_and_same: 'One and the Same Person Affidavit',
+      };
+      const title = typeTitles[payload.document_type || 'name_change'] || 'Legal Affidavit';
+      const subject = payload.new_value || payload.new_name || payload.full_name || 'your records';
+
+      setSessions(prevSessions =>
+        prevSessions.map(session => {
+          if (session.id === activeSessionId) {
+            return {
+              ...session,
+              messages: [
+                ...session.messages,
+                {
+                  sender: 'bot' as const,
+                  text: `📄 **${title} Generated**\n\nA standardized legal affidavit for **${subject}** has been generated and downloaded as \`${result.filename}\`.\n\n*Note: Print this document on non-judicial stamp paper of prescribed value in your state and get it attested before a Notary Public or Oath Commissioner.*`
+                }
+              ]
+            };
+          }
+          return session;
+        })
+      );
+    }
+
+    return result;
+  };
+
   return (
     <ChatContext.Provider value={{ 
-      sessions, activeSessionId, isTyping, createNewSession, switchSession, sendMessage, uploadDocument, updateSessionTitle, deleteSession 
+      sessions, activeSessionId, isTyping, createNewSession, switchSession, sendMessage, uploadDocument, updateSessionTitle, deleteSession, generateAffidavit 
     }}>
       {children}
     </ChatContext.Provider>
