@@ -1,0 +1,39 @@
+1. Name Change & Spelling Correction Affidavit
+Query 1 (Direct Spelling Correction):
+
+"Hi, my name is Isha and I want to change the name's spelling from 'Isha' to 'Esha' in my Aadhaar card. What process do I need to follow, and please provide the Word document file for the affidavit."
+
+Query 2 (Surname/Last Name Change):
+
+"Hello, my name is Rahul Sharma and I want to officially change my surname to Verma. Please provide the step-by-step guidance and generate the Word document affidavit."
+
+2. Residential Address Change Affidavit
+Query 1 (Address Shift):
+
+"Hi, my name is Rajesh Kumar and I want to update my residential address in my official records and Aadhaar. Can you draft a residential address change affidavit for me as a Word document?"
+
+Query 2 (Address Correction):
+
+"Hello, my name is Priya Mehta and I need to update my address after moving to a new apartment in Ahmedabad. Please provide the process and the downloadable address change .docx file."
+
+3. Date of Birth (DoB) Correction Affidavit
+Query 1 (DoB Rectification):
+
+"Hi, my name is Amit Patel and I need to create a legal affidavit stating my correct date of birth as 15-08-1998 for government records. Please provide the Word document file."
+
+Query 2 (Date of Birth Typo):
+
+"Hello, I noticed a mistake in my birth date on my educational and government documents. My actual date of birth is 22-11-2001. Can you explain the procedure and give me the correction affidavit in Word format?"
+
+4. General Legal / RAG Queries (Without Document Generation)
+Query 1 (Consumer Rights):
+
+"What are my legal rights under the Consumer Protection Act if an e-commerce website refuses to refund a defective product?"
+
+Query 2 (Right to Information - RTI):
+
+"How can I file an RTI application to check the status of a public road repair project in my municipal ward?"
+
+Query 3 (Contract Law):
+
+"What constitutes a valid and legally binding contract under Indian contract law?"

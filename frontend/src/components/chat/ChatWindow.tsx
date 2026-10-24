@@ -29,6 +29,7 @@ import {
   generateAndDownloadAffidavit,
   extractAffidavitDetails,
   isAffidavitMessage,
+  isDocumentGenerationQuery,
   getAffidavitDocType,
   type AffidavitPayload,
   type SupportedDocumentType,
@@ -66,6 +67,7 @@ export default function ChatWindow() {
   // Typewriter Placeholder State
   const placeholders = [
     "Ask about Consumer rights...",
+    "Change surname from John Mehta to John Joshi...",
     "Draft a Name Change Affidavit...",
     "Draft an Address Change Affidavit...",
     "Audit contract for red-flags...",
@@ -107,8 +109,9 @@ export default function ChatWindow() {
         // ignore
       }
 
-      // Extract details from message content, or fall back to user profile / placeholders
-      const payload = extractAffidavitDetails(messageText, storedUserFullName);
+      // Merge assistant text with preceding user prompt so all entities are captured
+      const prevUserMsg = messages.slice(0, idx).reverse().find(m => m.sender === 'user');
+      const payload = extractAffidavitDetails(messageText, storedUserFullName, prevUserMsg?.text);
 
       await generateAndDownloadAffidavit(payload);
 
@@ -131,6 +134,7 @@ export default function ChatWindow() {
   // Open modal with pre-filled details from a message or fresh
   const handleOpenCustomizeModal = (messageText?: string, defaultType?: SupportedDocumentType) => {
     let textToParse = messageText;
+    let queryContext: string | undefined = undefined;
 
     // If no explicit messageText provided, check current input query or last user query
     if (!textToParse) {
@@ -142,6 +146,9 @@ export default function ChatWindow() {
           textToParse = lastUserMsg.text;
         }
       }
+    } else {
+      const lastUserMsg = [...messages].reverse().find(m => m.sender === 'user');
+      queryContext = lastUserMsg?.text;
     }
 
     let storedUserFullName = '';
@@ -156,7 +163,7 @@ export default function ChatWindow() {
     }
 
     if (textToParse) {
-      const extracted = extractAffidavitDetails(textToParse, storedUserFullName);
+      const extracted = extractAffidavitDetails(textToParse, storedUserFullName, queryContext);
       if (defaultType) {
         extracted.document_type = defaultType;
       }
@@ -168,32 +175,32 @@ export default function ChatWindow() {
   };
 
   // Trigger Contract Risk Audit
-  const handleTriggerAudit = async (customText?: string) => {
-    setIsAuditDrawerOpen(true);
-    if (auditReport && !customText) return;
-
+  const handleTriggerAudit = async () => {
     try {
       setIsAuditLoading(true);
-      const result = await requestContractAudit({
-        sessionId: activeSessionId,
-        contractText: customText || null,
+      setIsAuditDrawerOpen(true);
+
+      const report = await requestContractAudit({
+        sessionId: activeSessionId || undefined,
       });
-      setAuditReport(result);
+
+      setAuditReport(report);
     } catch (err: any) {
       console.error('Audit Error:', err);
-      alert(err?.message || 'Failed to analyze contract risks. Make sure a document is uploaded in this consultation.');
+      alert(err?.message || 'Failed to execute contract risk audit.');
+      setIsAuditDrawerOpen(false);
     } finally {
       setIsAuditLoading(false);
     }
   };
 
-  // Ask AI in chat to renegotiate a specific flagged clause
-  const handleAskRenegotiate = (clauseTitle: string, recommendation: string) => {
-    const prompt = `Please draft a balanced, mutually protective amendment under Indian contract law for the following flagged clause:\n\n**Clause:** ${clauseTitle}\n**Recommended Direction:** ${recommendation}`;
-    sendMessage(prompt);
+  const handleAskRenegotiate = (clauseTitle: string) => {
+    setIsAuditDrawerOpen(false);
+    const renegotiatePrompt = `Please draft an amendment and renegotiation proposal for the contract clause: "${clauseTitle}" to balance liabilities fairly under Indian law.`;
+    handleSend(renegotiatePrompt);
   };
-  
-  // Dynamic Typewriter Effect Logic
+
+  // Typewriter Effect Logic
   useEffect(() => {
     if (isListening) return;
 
@@ -244,6 +251,8 @@ export default function ChatWindow() {
   const handleSend = (textOverride?: string) => {
     const textToSend = textOverride || input;
     if (!textToSend.trim()) return;
+
+    // Send the user query to the backend RAG/chat streaming flow
     sendMessage(textToSend);
     setInput('');
   };
@@ -252,7 +261,7 @@ export default function ChatWindow() {
     const file = e.target.files?.[0];
     if (file) {
       uploadDocument(file);
-      e.target.value = ''; // Reset input field
+      e.target.value = '';
     }
   };
 
@@ -278,10 +287,15 @@ export default function ChatWindow() {
     },
     {
       icon: <UserCheck className="w-6 h-6 text-brand-gold" />,
-      title: "Name Affidavit",
-      query: "Generate standardized Name Change Affidavit (.docx)",
-      isAction: true,
-      onAction: () => handleOpenCustomizeModal(undefined, 'name_change'),
+      title: "Surname Change",
+      query: "I want to change surname from John Mehta to John Joshi, provide the affidavit",
+      isAction: false,
+    },
+    {
+      icon: <FileText className="w-6 h-6 text-indigo-500" />,
+      title: "Name Change",
+      query: "Hi, my name is Isha and I want to change the name's spelling from 'Isha' to 'Esha' in my Aadhaar card. What process do I need to follow, and please provide the Word document file for the affidavit.",
+      isAction: false,
     },
     {
       icon: <Home className="w-6 h-6 text-blue-500" />,
@@ -289,13 +303,6 @@ export default function ChatWindow() {
       query: "Generate Address Change / Proof of Residence Affidavit (.docx)",
       isAction: true,
       onAction: () => handleOpenCustomizeModal(undefined, 'address_change'),
-    },
-    {
-      icon: <Calendar className="w-6 h-6 text-emerald-500" />,
-      title: "DOB Correction",
-      query: "Draft standardized Date of Birth (DOB) Correction Affidavit (.docx)",
-      isAction: true,
-      onAction: () => handleOpenCustomizeModal(undefined, 'dob_correction'),
     },
   ];
 
@@ -310,20 +317,21 @@ export default function ChatWindow() {
 
         <button
           onClick={() => handleTriggerAudit()}
-          className="ml-3 px-3 py-1 bg-brand-gold text-brand-blue rounded-lg font-bold text-xs hover:bg-yellow-400 active:scale-95 transition flex items-center gap-1.5 flex-shrink-0 cursor-pointer shadow-xs"
-          title="Audit active session document or contract for red-flags and liabilities"
+          className="ml-3 flex-shrink-0 flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 rounded-lg text-xs font-semibold transition shadow-xs cursor-pointer"
+          title="Run Contract Risk Assessment on attached document"
         >
           <ShieldAlert className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Contract</span> Risk Audit
+          <span className="hidden sm:inline">Contract Audit</span>
         </button>
       </div>
 
+      {/* Main Chat Messages Container */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 pb-32">
         
         {/* Welcome State */}
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full max-w-4xl mx-auto text-center animate-message mt-8">
-            <div className="w-20 h-20 bg-brand-blue text-brand-gold rounded-2xl flex items-center justify-center shadow-lg mb-6 ">
+            <div className="w-20 h-20 bg-brand-blue text-brand-gold rounded-2xl flex items-center justify-center shadow-lg mb-6">
               <ScaleIcon className="w-10 h-10" />
             </div>
             <h2 className="text-3xl font-serif font-bold text-brand-blue mb-3">What legal question can I clarify for you today?</h2>
@@ -350,10 +358,22 @@ export default function ChatWindow() {
         {/* Message Bubbles */}
         {messages.map((msg, idx) => {
           const isDocUpload = msg.text.includes('Uploaded document:') || msg.text.includes('Successfully uploaded');
-          const isAffidavit = isAffidavitMessage(msg.text);
-          const docType: SupportedDocumentType = isAffidavit ? getAffidavitDocType(msg.text) : 'name_change';
+          
+          // Contextually inspect preceding user query for affidavit intent
+          const prevUserMsg = messages.slice(0, idx).reverse().find(m => m.sender === 'user');
+          const userAskedForDoc = prevUserMsg ? isDocumentGenerationQuery(prevUserMsg.text) : false;
+          const isAffidavit = isAffidavitMessage(msg.text) || (msg.sender === 'bot' && userAskedForDoc);
+          
+          const docType: SupportedDocumentType = isAffidavit 
+            ? getAffidavitDocType(prevUserMsg ? `${prevUserMsg.text}\n${msg.text}` : msg.text) 
+            : 'name_change';
 
           const docTypeDetails: Record<SupportedDocumentType, { title: string; desc: string; icon: React.ReactNode }> = {
+            surname_change: {
+              title: 'Surname Change Affidavit (.docx)',
+              desc: 'Official affidavit for surname change, family name update & Gazette notification',
+              icon: <UserCheck className="w-5 h-5" />,
+            },
             dob_correction: {
               title: 'Date of Birth (DOB) Correction Affidavit (.docx)',
               desc: 'Formal declaration for correcting date of birth across school records, PAN & Passport',
@@ -433,7 +453,7 @@ export default function ChatWindow() {
                           </div>
 
                           <div className="flex items-center gap-2 self-end sm:self-auto">
-                            {/* Clean, Direct Download Button */}
+                            {/* Direct Download Button */}
                             <button
                               onClick={() => handleDirectDownload(msg.text, idx)}
                               disabled={downloadingIdx === idx}

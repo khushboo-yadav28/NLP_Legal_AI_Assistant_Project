@@ -4,11 +4,22 @@ import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import ChatWindow from './components/chat/ChatWindow';
 import Login from './components/auth/Login';
 import Register from './components/auth/Register';
+import LandingPage from './pages/LandingPage';
 import { Scale, Plus, MessageSquare, Edit2, Check, Menu, X, LogOut, Trash2 } from 'lucide-react';
 import { useChatContext } from './context/ChatContext';
 
 function ChatLayout() {
-  const { sessions, activeSessionId, createNewSession, switchSession, updateSessionTitle, deleteSession } = useChatContext();
+  const { 
+    sessions, 
+    activeSessionId, 
+    createNewSession, 
+    switchSession, 
+    updateSessionTitle, 
+    deleteSession, 
+    logout, 
+    isLoadingSessions, 
+    syncSessionsFromBackend 
+  } = useChatContext();
   const navigate = useNavigate();
   
   // Mobile menu and profile state
@@ -30,19 +41,26 @@ function ChatLayout() {
     } else {
       try {
         setCurrentUser(JSON.parse(storedUser));
-      } catch (e) {
+      } catch {
         navigate('/login', { replace: true });
       }
     }
   }, [navigate]);
 
+  // Sync sessions on mount of ChatLayout
+  useEffect(() => {
+    syncSessionsFromBackend();
+  }, []);
+
   const userName = currentUser?.full_name || currentUser?.email || 'User';
   const userInitial = userName.charAt(0).toUpperCase();
 
-  // Create initial session if empty
+  // Create initial session if empty and not loading
   useEffect(() => {
-    if (sessions.length === 0) createNewSession();
-  }, [sessions.length, createNewSession]);
+    if (!isLoadingSessions && sessions.length === 0) {
+      createNewSession();
+    }
+  }, [sessions.length, isLoadingSessions, createNewSession]);
 
   // Focus input automatically when edit mode starts
   useEffect(() => {
@@ -70,9 +88,11 @@ function ChatLayout() {
     if (e.key === 'Escape') setEditingId(null);
   };
 
-  // Logout Handler
+  // Logout Handler with immediate state clearing
   const handleLogout = () => {
+    logout();
     localStorage.removeItem('legal_ai_user');
+    localStorage.removeItem('legal_ai_token');
     localStorage.removeItem('legal_ai_user_name');
     navigate('/login', { replace: true });
   };
@@ -82,11 +102,15 @@ function ChatLayout() {
       
       {/* Mobile Top Header (Hidden on Desktop) */}
       <div className="md:hidden bg-brand-blue text-white p-4 flex items-center justify-between shadow-md z-20">
-        <div className="flex items-center gap-2">
+        <button 
+          onClick={() => navigate('/')} 
+          className="flex items-center gap-2 cursor-pointer text-left"
+          title="Return to Landing Page"
+        >
           <Scale className="w-6 h-6 text-brand-gold" />
           <h1 className="font-serif font-bold text-lg">Legal AI</h1>
-        </div>
-        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-brand-gold p-1">
+        </button>
+        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-brand-gold p-1 cursor-pointer">
           {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
       </div>
@@ -97,11 +121,20 @@ function ChatLayout() {
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
         {/* Desktop Header (Hidden on Mobile) */}
-        <div className="hidden md:flex p-6 border-b border-gray-100 items-center gap-3">
-          <div className="bg-brand-blue text-brand-gold p-2 rounded-lg">
-            <Scale className="w-6 h-6" />
-          </div>
-          <h1 className="font-serif font-bold text-xl text-brand-blue">Legal AI</h1>
+        <div className="hidden md:flex p-6 border-b border-gray-100 items-center justify-between">
+          <button 
+            onClick={() => navigate('/')} 
+            className="flex items-center gap-3 text-left group hover:opacity-90 transition cursor-pointer"
+            title="Return to Landing Page"
+          >
+            <div className="bg-brand-blue text-brand-gold p-2 rounded-lg group-hover:scale-105 transition-transform">
+              <Scale className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="font-serif font-bold text-xl text-brand-blue">Legal AI</h1>
+              <p className="text-[11px] text-gray-400">Home & Overview</p>
+            </div>
+          </button>
         </div>
         
         <div className="p-4">
@@ -110,7 +143,7 @@ function ChatLayout() {
               createNewSession();
               setIsMobileMenuOpen(false);
             }} 
-            className="w-full flex items-center justify-center gap-2 bg-brand-blue text-white py-3 rounded-lg hover:bg-opacity-90 transition font-medium"
+            className="w-full flex items-center justify-center gap-2 bg-brand-blue text-white py-3 rounded-lg hover:bg-opacity-90 transition font-medium cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             New Consultation
@@ -188,7 +221,7 @@ function ChatLayout() {
             <div className="absolute bottom-full left-0 w-full p-2 bg-white border-t border-gray-200 shadow-lg">
               <button 
                 onClick={handleLogout}
-                className="w-full flex items-center gap-3 p-3 text-red-600 hover:bg-red-50 rounded-lg transition font-medium"
+                className="w-full flex items-center gap-3 p-3 text-red-600 hover:bg-red-50 rounded-lg transition font-medium cursor-pointer"
               >
                 <LogOut className="w-4 h-4" />
                 Sign Out
@@ -207,7 +240,7 @@ function ChatLayout() {
               <p className="text-sm font-semibold text-brand-blue truncate" title={userName}>
                 {userName}
               </p>
-              <p className="text-xs text-gray-400">Free Tier</p>
+              <p className="text-xs text-gray-400">Professional Free Tier</p>
             </div>
           </div>
         </div>
@@ -233,10 +266,11 @@ function ChatLayout() {
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/chat" element={<ChatLayout />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

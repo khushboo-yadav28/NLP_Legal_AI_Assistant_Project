@@ -28,8 +28,8 @@ class ChatRepository:
     @staticmethod
     def create_session(db: Session, user_id: str, title: str = "New Consultation") -> ChatSessionTable:
         """Create a new chat session (thread) for a user."""
-        now = utc_now() #datetime.now(timezone.utc)
-        session = ChatSessionTable(user_id=user_id, title=title,created_at=now,updated_at=now)
+        now = utc_now()
+        session = ChatSessionTable(user_id=str(user_id), title=title, created_at=now, updated_at=now)
         db.add(session)
         db.commit()
         db.refresh(session)
@@ -41,16 +41,37 @@ class ChatRepository:
         return db.query(ChatSessionTable).filter(ChatSessionTable.id == session_id).first()
 
     @staticmethod
+    def get_user_session_by_id(db: Session, session_id: str, user_id: str) -> Optional[ChatSessionTable]:
+        """Fetch a single chat session strictly filtered by user ID."""
+        return db.query(ChatSessionTable).filter(
+            ChatSessionTable.id == session_id,
+            ChatSessionTable.user_id == str(user_id)
+        ).first()
+
+    @staticmethod
     def get_user_sessions(db: Session, user_id: str) -> List[ChatSessionTable]:
         """Fetch all chat sessions for a user, ordered by most recently updated."""
         return db.query(ChatSessionTable).filter(
-            ChatSessionTable.user_id == user_id
+            ChatSessionTable.user_id == str(user_id)
         ).order_by(ChatSessionTable.updated_at.desc()).all()
 
     @staticmethod
     def delete_session(db: Session, session_id: str) -> bool:
         """Delete a chat session and all associated messages via cascade."""
         session = db.query(ChatSessionTable).filter(ChatSessionTable.id == session_id).first()
+        if session:
+            db.delete(session)
+            db.commit()
+            return True
+        return False
+
+    @staticmethod
+    def delete_user_session(db: Session, session_id: str, user_id: str) -> bool:
+        """Delete a chat session strictly enforcing user ownership."""
+        session = db.query(ChatSessionTable).filter(
+            ChatSessionTable.id == session_id,
+            ChatSessionTable.user_id == str(user_id)
+        ).first()
         if session:
             db.delete(session)
             db.commit()
@@ -82,7 +103,7 @@ class ChatRepository:
         # Update parent session's updated_at timestamp
         session = db.query(ChatSessionTable).filter(ChatSessionTable.id == session_id).first()
         if session:
-            session.updated_at = utc_now() #datetime.now(timezone.utc)
+            session.updated_at = utc_now()
 
         db.commit()
         db.refresh(message)
@@ -133,7 +154,7 @@ class ChatRepository:
             session.uploaded_file_uri = file_uri
             session.gemini_cache_name = cache_name
             session.cache_expires_at = expires_at
-            session.updated_at = utc_now() #datetime.now(timezone.utc)
+            session.updated_at = utc_now()
             db.commit()
             db.refresh(session)
         return session
@@ -143,7 +164,6 @@ class ChatRepository:
         """Appends a new Gemini file URI to the chat session's uploaded_file_uris array."""
         session = db.query(ChatSessionTable).filter(ChatSessionTable.id == session_id).first()
         if session:
-            # Re-assign or initialize list to trigger SQLAlchemy JSON mutation detection
             current_uris = list(session.uploaded_file_uris or [])
             if file_uri not in current_uris:
                 current_uris.append(file_uri)

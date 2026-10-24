@@ -16,6 +16,7 @@ from app.models.contract_audit import ContractAuditReport, ContractAuditRequest
 from app.models.user import User
 from app.services.affidavit_generator import (
     generate_affidavit_docx,
+    generate_surname_change_affidavit_docx,
     generate_name_change_affidavit_docx,
     generate_address_change_affidavit_docx,
     generate_dob_correction_affidavit_docx,
@@ -49,7 +50,7 @@ def get_optional_current_user(
 @router.post(
     "/generate-affidavit",
     summary="Generate Legal Affidavit (.docx)",
-    description="Generates a standardized legal affidavit (Name Change, Address Change, DOB Correction, Relation Update, One and the Same Person) Word document based on user inputs.",
+    description="Generates a standardized legal affidavit (Surname Change, Name Change, Address Change, DOB Correction, Relation Update, One and the Same Person) Word document based on user inputs or natural language query.",
     responses={
         200: {
             "content": {
@@ -63,7 +64,10 @@ def generate_affidavit(payload: AffidavitRequest):
     try:
         # Route to corresponding python-docx template builder based on document_type
         doc_type = (payload.document_type or "name_change").strip().lower()
-        if "dob" in doc_type or "birth" in doc_type:
+        if "surname" in doc_type or "last_name" in doc_type or "family_name" in doc_type:
+            docx_stream = generate_surname_change_affidavit_docx(payload)
+            type_prefix = "Surname_Change"
+        elif "dob" in doc_type or "birth" in doc_type:
             docx_stream = generate_dob_correction_affidavit_docx(payload)
             type_prefix = "DOB_Correction"
         elif "address" in doc_type or "residence" in doc_type:

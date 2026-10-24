@@ -38,6 +38,10 @@ export default function Register() {
       // 3. Automatically log the user in by saving session details after successful registration
       localStorage.setItem('legal_ai_user', JSON.stringify(data));
       localStorage.setItem('legal_ai_user_name', data.full_name || name);
+      if (data.access_token) {
+        localStorage.setItem('legal_ai_token', data.access_token);
+      }
+      window.dispatchEvent(new Event('legal_ai_auth_change'));
 
       // 4. Navigate into the chat dashboard
       navigate('/chat', { replace: true });
@@ -50,12 +54,12 @@ export default function Register() {
     <div className="min-h-screen bg-brand-light flex flex-col justify-center items-center p-4 font-sans text-gray-800">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
         
-        <div className="bg-brand-blue p-6 text-center">
+        <Link to="/" className="block bg-brand-blue p-6 text-center hover:opacity-95 transition" title="Return to Home">
           <div className="mx-auto bg-brand-blue border border-brand-gold text-brand-gold w-12 h-12 rounded-full flex items-center justify-center mb-2">
             <Scale size={24} />
           </div>
           <h1 className="text-xl font-serif font-bold text-white">Create Account</h1>
-        </div>
+        </Link>
 
         <div className="p-8">
           {errorMsg && (
@@ -77,7 +81,7 @@ export default function Register() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-gold transition bg-brand-light"
-                  placeholder="John Doe"
+                  placeholder="Adv. Rajesh Kumar"
                 />
               </div>
             </div>
@@ -118,7 +122,7 @@ export default function Register() {
 
             <button
               type="submit"
-              className="w-full bg-brand-gold text-brand-blue font-bold py-3 px-4 rounded-lg hover:bg-opacity-90 transition shadow-md mt-6"
+              className="w-full bg-brand-gold text-brand-blue font-bold py-3 px-4 rounded-lg hover:bg-opacity-90 transition shadow-md mt-6 cursor-pointer"
             >
               Register Securely
             </button>
@@ -130,6 +134,12 @@ export default function Register() {
               Sign In
             </Link>
           </p>
+
+          <div className="mt-4 text-center">
+            <Link to="/" className="text-xs text-gray-400 hover:text-brand-blue transition">
+              ← Return to Home Overview
+            </Link>
+          </div>
         </div>
       </div>
     </div>

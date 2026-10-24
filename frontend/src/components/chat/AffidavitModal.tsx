@@ -44,7 +44,6 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
   const [error, setError] = useState<string | null>(null);
   const [successFilename, setSuccessFilename] = useState<string | null>(null);
 
-  // Initialize or update form data when modal opens
   useEffect(() => {
     if (isOpen) {
       setError(null);
@@ -52,6 +51,7 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
 
       const incomingType = initialData?.document_type as SupportedDocumentType;
       const validTypes: SupportedDocumentType[] = [
+        'surname_change',
         'name_change',
         'address_change',
         'dob_correction',
@@ -77,7 +77,6 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
         state: initialData?.state || '',
       };
 
-      // Fallback to logged-in user name if full_name is empty
       if (!initial.full_name) {
         try {
           const storedUser = localStorage.getItem('legal_ai_user');
@@ -85,7 +84,7 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
             const user = JSON.parse(storedUser);
             if (user?.full_name) {
               initial.full_name = user.full_name;
-              if (targetType === 'name_change' && !initial.old_value) {
+              if ((targetType === 'name_change' || targetType === 'surname_change') && !initial.old_value) {
                 initial.old_value = user.full_name;
               }
             }
@@ -106,6 +105,9 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
     setFormData(prev => ({
       ...prev,
       document_type: type,
+      old_value: '',
+      new_value: '',
+      new_name: (type === 'name_change' || type === 'surname_change') ? prev.new_name : '',
     }));
     if (error) setError(null);
   };
@@ -121,14 +123,18 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
     setError(null);
     setSuccessFilename(null);
 
-    // Common Validation
     if (!formData.full_name?.trim()) {
       setError('Please provide the deponent full name.');
       return;
     }
 
-    // Type Specific Validation
-    if (docType === 'name_change') {
+    if (docType === 'surname_change') {
+      const newSurnameVal = (formData.new_value || formData.new_name || '').trim();
+      if (!newSurnameVal) {
+        setError('Please provide the new full name with adopted surname (e.g. John Joshi).');
+        return;
+      }
+    } else if (docType === 'name_change') {
       const newName = (formData.new_value || formData.new_name || '').trim();
       if (!newName) {
         setError('Please provide the new / corrected full name.');
@@ -140,8 +146,8 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
         return;
       }
     } else if (docType === 'dob_correction') {
-      if (!formData.old_value?.trim() || !formData.new_value?.trim()) {
-        setError('Please provide both the incorrect recorded DOB and the actual correct DOB.');
+      if (!formData.new_value?.trim()) {
+        setError('Please provide the actual correct DOB.');
         return;
       }
     } else if (docType === 'relation_update') {
@@ -168,9 +174,18 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
       ...formData,
       document_type: docType,
       age: parsedAge,
-      old_value: docType === 'name_change' ? (formData.old_value || formData.full_name) : formData.old_value,
-      new_value: docType === 'name_change' ? (formData.new_value || formData.new_name) : formData.new_value,
-      new_name: docType === 'name_change' ? (formData.new_value || formData.new_name) : formData.new_name,
+      old_value:
+        docType === 'surname_change' || docType === 'name_change'
+          ? (formData.old_value || formData.full_name)
+          : formData.old_value,
+      new_value:
+        docType === 'surname_change' || docType === 'name_change'
+          ? (formData.new_value || formData.new_name)
+          : formData.new_value,
+      new_name:
+        docType === 'surname_change' || docType === 'name_change'
+          ? (formData.new_value || formData.new_name)
+          : formData.new_name,
     };
 
     try {
@@ -182,7 +197,6 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
         onSuccess(result.filename, payloadToSend);
       }
 
-      // Auto close modal after brief delay
       setTimeout(() => {
         onClose();
       }, 1600);
@@ -196,10 +210,12 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
 
   const getFormatGuaranteeText = () => {
     switch (docType) {
+      case 'surname_change':
+        return 'Surname Change / Family Name Affidavit (.docx) formatted strictly for official surname relinquishment & adoption before Notary Public & Gazette.';
       case 'dob_correction':
         return 'Date of Birth Correction Affidavit (.docx) formatted for School Boards, Birth Registrar, PAN & Passport Authorities.';
       case 'relation_update':
-        return "Parent / Spouse Name Correction Affidavit (.docx) formatted for official government databases and ID records.";
+        return 'Parent / Spouse Name Correction Affidavit (.docx) formatted for official government databases and ID records.';
       case 'one_and_same':
         return 'One and the Same Person Affidavit (.docx) legally verifying identical individual identity across discrepant educational certificates & government IDs.';
       case 'address_change':
@@ -218,7 +234,6 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
         aria-modal="true"
         aria-labelledby="affidavit-modal-title"
       >
-        {/* Header */}
         <div className="bg-brand-blue text-white px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-brand-gold/20 text-brand-gold rounded-xl">
@@ -242,8 +257,20 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
           </button>
         </div>
 
-        {/* Document Type Switcher Tabs (Supported Document Types) */}
         <div className="bg-gray-50 border-b border-gray-200 px-6 py-2.5 flex items-center gap-1.5 overflow-x-auto scrollbar-thin">
+          <button
+            type="button"
+            onClick={() => handleTypeSwitch('surname_change')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition flex-shrink-0 cursor-pointer ${
+              docType === 'surname_change'
+                ? 'bg-brand-blue text-brand-gold shadow-xs'
+                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+            }`}
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>Surname Change</span>
+          </button>
+
           <button
             type="button"
             onClick={() => handleTypeSwitch('name_change')}
@@ -310,7 +337,6 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
           </button>
         </div>
 
-        {/* Form Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
           {error && (
             <div className="p-3.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm flex items-center gap-2">
@@ -328,7 +354,42 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
             </div>
           )}
 
-          {/* Scenario 1: Name Change Fields */}
+          {docType === 'surname_change' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+                  Full Name with Former Surname <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="full_name"
+                  value={formData.full_name || ''}
+                  onChange={handleChange}
+                  placeholder="e.g., John Mehta"
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 outline-none text-sm transition"
+                />
+                <span className="text-[11px] text-gray-400">Current full name recorded in official records</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+                  New Full Name with Adopted Surname <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="new_value"
+                  value={formData.new_value || formData.new_name || ''}
+                  onChange={handleChange}
+                  placeholder="e.g., John Joshi"
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 outline-none text-sm transition"
+                />
+                <span className="text-[11px] text-gray-400">Full legal name with the newly assumed surname</span>
+              </div>
+            </div>
+          )}
+
           {docType === 'name_change' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -365,7 +426,6 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
             </div>
           )}
 
-          {/* Scenario 2: Address Change Fields */}
           {docType === 'address_change' && (
             <div className="space-y-4">
               <div>
@@ -418,7 +478,6 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
             </div>
           )}
 
-          {/* Scenario 3: Date of Birth Correction Fields (DOB Specific Fields) */}
           {docType === 'dob_correction' && (
             <div className="space-y-4">
               <div>
@@ -434,13 +493,12 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
                   required
                   className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 outline-none text-sm transition"
                 />
-                <span className="text-[11px] text-gray-400">Name of person whose DOB is being corrected</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
-                    Incorrect Recorded DOB <span className="text-red-500">*</span>
+                    Incorrect Recorded DOB
                   </label>
                   <input
                     type="text"
@@ -448,10 +506,9 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
                     value={formData.old_value || ''}
                     onChange={handleChange}
                     placeholder="e.g., 14/08/1992 (DD/MM/YYYY)"
-                    required
                     className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 outline-none text-sm transition"
                   />
-                  <span className="text-[11px] text-gray-400">Erroneous date of birth in school/official records</span>
+                  <span className="text-[11px] text-gray-400">Erroneous date of birth in records</span>
                 </div>
 
                 <div>
@@ -463,17 +520,16 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
                     name="new_value"
                     value={formData.new_value || ''}
                     onChange={handleChange}
-                    placeholder="e.g., 24/08/1992 (DD/MM/YYYY)"
+                    placeholder="e.g., 15-08-1998 (DD-MM-YYYY)"
                     required
                     className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 outline-none text-sm transition"
                   />
-                  <span className="text-[11px] text-gray-400">Genuine date of birth per birth certificate / hospital</span>
+                  <span className="text-[11px] text-gray-400">Genuine date of birth per certificates</span>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Scenario 4: Parent / Spouse Name Correction Fields */}
           {docType === 'relation_update' && (
             <div className="space-y-4">
               <div>
@@ -494,7 +550,7 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
-                    Incorrect Recorded Name <span className="text-red-500">*</span>
+                    Incorrect Recorded Relative Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -505,12 +561,11 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
                     required
                     className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 outline-none text-sm transition"
                   />
-                  <span className="text-[11px] text-gray-400">Erroneous parent/spouse name on record</span>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
-                    Correct Actual Name <span className="text-red-500">*</span>
+                    Correct Actual Relative Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -521,13 +576,11 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
                     required
                     className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 outline-none text-sm transition"
                   />
-                  <span className="text-[11px] text-gray-400">Actual legal parent/spouse name</span>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Scenario 5: One and the Same Person Fields */}
           {docType === 'one_and_same' && (
             <div className="space-y-4">
               <div>
@@ -555,11 +608,10 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
                     name="old_value"
                     value={formData.old_value || ''}
                     onChange={handleChange}
-                    placeholder="e.g., Vikram Sharma (in 10th Certificate)"
+                    placeholder="e.g., Vikram Sharma"
                     required
                     className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 outline-none text-sm transition"
                   />
-                  <span className="text-[11px] text-gray-400">First spelling / name variation</span>
                 </div>
 
                 <div>
@@ -571,17 +623,15 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
                     name="new_value"
                     value={formData.new_value || ''}
                     onChange={handleChange}
-                    placeholder="e.g., Vikramaditya Sharma (in Aadhaar)"
+                    placeholder="e.g., Vikramaditya Sharma"
                     required
                     className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 outline-none text-sm transition"
                   />
-                  <span className="text-[11px] text-gray-400">Second spelling / name variation</span>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Common Fields: Father/Spouse & Age */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
@@ -614,7 +664,6 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
             </div>
           </div>
 
-          {/* Residential Address (for all types except address_change where it's already captured) */}
           {docType !== 'address_change' && (
             <div>
               <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
@@ -631,7 +680,6 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
             </div>
           )}
 
-          {/* City & State */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
@@ -642,7 +690,7 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
                 name="city"
                 value={formData.city || ''}
                 onChange={handleChange}
-                placeholder="e.g., New Delhi"
+                placeholder="e.g., Ahmedabad"
                 className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 outline-none text-sm transition"
               />
             </div>
@@ -656,7 +704,7 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
                 name="state"
                 value={formData.state || ''}
                 onChange={handleChange}
-                placeholder="e.g., Delhi"
+                placeholder="e.g., Gujarat"
                 className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 outline-none text-sm transition"
               />
             </div>
@@ -668,7 +716,6 @@ export default function AffidavitModal({ isOpen, onClose, onSuccess, initialData
             Includes deponent declaration, verification clauses, and notary attestation spaces ready for non-judicial stamp paper.
           </div>
 
-          {/* Modal Actions */}
           <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-3">
             <button
               type="button"

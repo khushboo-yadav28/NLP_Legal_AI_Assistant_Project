@@ -1,6 +1,7 @@
 // src/services/documentService.ts
 
 export type SupportedDocumentType =
+  | 'surname_change'
   | 'name_change'
   | 'address_change'
   | 'dob_correction'
@@ -9,6 +10,7 @@ export type SupportedDocumentType =
 
 export interface AffidavitPayload {
   document_type?: SupportedDocumentType | string;
+  query?: string;
   full_name?: string;
   old_value?: string;
   new_value?: string;
@@ -23,15 +25,68 @@ export interface AffidavitPayload {
 }
 
 /**
- * Identifies the specific document type from user query or assistant message text.
- * Maps 'date of birth' / 'DoB' queries to 'dob_correction',
- * address queries to 'address_change', and name/spelling queries to 'name_change'.
+ * Checks whether an incoming user query is requesting an affidavit or downloadable document.
+ * Returns false for standard RAG / legal informational questions (Consumer Protection, RTI, Contract law).
+ */
+export function isDocumentGenerationQuery(text: string): boolean {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+
+  // Strong positive markers
+  const hasDocMarker =
+    lower.includes('affidavit') ||
+    lower.includes('.docx') ||
+    lower.includes('word document') ||
+    lower.includes('word format') ||
+    lower.includes('word file') ||
+    lower.includes('downloadable') ||
+    lower.includes('draft') ||
+    lower.includes('generate the document') ||
+    lower.includes('provide the document') ||
+    lower.includes('correction document') ||
+    lower.includes('change surname') ||
+    lower.includes('surname change') ||
+    lower.includes('change name') ||
+    lower.includes('name change') ||
+    lower.includes('spelling correction');
+
+  if (!hasDocMarker) return false;
+
+  // If query is purely conceptual and doesn't ask for a file/draft/affidavit
+  const isPureQuestion =
+    (lower.startsWith('what are') || lower.startsWith('what is') || lower.startsWith('how can i file an rti') || lower.startsWith('what constitutes')) &&
+    !lower.includes('affidavit') &&
+    !lower.includes('.docx') &&
+    !lower.includes('word document') &&
+    !lower.includes('word file') &&
+    !lower.includes('draft');
+
+  return !isPureQuestion;
+}
+
+/**
+ * Identifies the exact document intent from natural language query or assistant message text.
+ * Prioritizes Surname Change, DOB Correction, Address Change, Relation Update, One and the Same Person, and Name Change.
  */
 export function getAffidavitDocType(text: string): SupportedDocumentType {
   if (!text) return 'name_change';
   const lower = text.toLowerCase();
 
-  // 1. Date of Birth / DoB queries
+  // 1. Surname / Last Name / Family Name Change
+  if (
+    lower.includes('surname') ||
+    lower.includes('last name') ||
+    lower.includes('lastname') ||
+    lower.includes('family name') ||
+    lower.includes('change surname') ||
+    lower.includes('surname change') ||
+    lower.includes('change my surname') ||
+    lower.includes('update surname')
+  ) {
+    return 'surname_change';
+  }
+
+  // 2. Date of Birth / DoB queries
   if (
     lower.includes('date of birth') ||
     lower.includes('birth date') ||
@@ -41,24 +96,27 @@ export function getAffidavitDocType(text: string): SupportedDocumentType {
     lower.includes('dob correction') ||
     lower.includes('change dob') ||
     lower.includes('update dob') ||
+    lower.includes('dob typo') ||
+    lower.includes('rectification of dob') ||
     /\b(dob|d\.o\.b\.?)\b/i.test(text)
   ) {
     return 'dob_correction';
   }
 
-  // 2. One and the same person
+  // 3. One and the same person
   if (
     lower.includes('one and the same') ||
     lower.includes('one and same') ||
     lower.includes('same person') ||
     lower.includes('alias') ||
     lower.includes('name variation') ||
-    lower.includes('singular identity')
+    lower.includes('singular identity') ||
+    lower.includes('two names refer to')
   ) {
     return 'one_and_same';
   }
 
-  // 3. Relation / Parent / Spouse update
+  // 4. Relation / Parent / Spouse update
   if (
     lower.includes('relation update') ||
     lower.includes('father name') ||
@@ -67,12 +125,15 @@ export function getAffidavitDocType(text: string): SupportedDocumentType {
     lower.includes("mother's name") ||
     lower.includes('spouse name') ||
     lower.includes("spouse's name") ||
-    lower.includes('parent name')
+    lower.includes('parent name') ||
+    lower.includes("parent's name") ||
+    lower.includes('husband name') ||
+    lower.includes('wife name')
   ) {
     return 'relation_update';
   }
 
-  // 4. Address change / Proof of residence
+  // 5. Address change / Proof of residence
   if (
     lower.includes('address change') ||
     lower.includes('change of address') ||
@@ -83,12 +144,15 @@ export function getAffidavitDocType(text: string): SupportedDocumentType {
     lower.includes('new address') ||
     lower.includes('old address') ||
     lower.includes('address correction') ||
+    lower.includes('relocation') ||
+    lower.includes('shifted to a new') ||
+    lower.includes('moving to a new') ||
     /\b(address|residence|relocation)\b/i.test(text)
   ) {
     return 'address_change';
   }
 
-  // 5. Default: Name change / spelling
+  // 6. Default: Name change / spelling correction
   return 'name_change';
 }
 
@@ -100,9 +164,17 @@ export function isAffidavitMessage(text: string): boolean {
   if (!text) return false;
   const lower = text.toLowerCase();
 
-  if (!lower.includes('affidavit')) return false;
+  const mentionsAffidavit =
+    lower.includes('affidavit') ||
+    lower.includes('word document') ||
+    lower.includes('.docx') ||
+    lower.includes('notarized document');
+
+  if (!mentionsAffidavit) return false;
 
   return (
+    lower.includes('surname') ||
+    lower.includes('last name') ||
     lower.includes('name change') ||
     lower.includes('change of name') ||
     lower.includes('spelling correction') ||
@@ -128,11 +200,17 @@ export function isAffidavitMessage(text: string): boolean {
 }
 
 /**
- * Extracts structured affidavit fields from an assistant message or markdown text.
- * Dynamically resolves parameters for name_change, address_change, and dob_correction.
+ * Extracts structured affidavit fields from query or message text.
+ * Dynamically resolves parameters for surname_change, name_change, address_change,
+ * dob_correction, relation_update, and one_and_same.
  */
-export function extractAffidavitDetails(text: string, defaultName?: string): AffidavitPayload {
-  const docType = getAffidavitDocType(text);
+export function extractAffidavitDetails(
+  text: string,
+  defaultName?: string,
+  queryContext?: string
+): AffidavitPayload {
+  const combinedText = queryContext ? `${queryContext}\n${text}` : text;
+  const docType = getAffidavitDocType(combinedText);
 
   const result: AffidavitPayload = {
     document_type: docType,
@@ -148,25 +226,31 @@ export function extractAffidavitDetails(text: string, defaultName?: string): Aff
     state: '',
   };
 
-  if (!text) return result;
+  if (!combinedText) return result;
 
-  // 1. Deponent Current/Full Name
-  const deponentMatch =
-    text.match(/I,\s*[*_]*([A-Za-z\s\.]+?)[*_]*,\s*(?:Son|Daughter|Spouse|S\/o|D\/o|W\/o)/i) ||
-    text.match(/(?:recorded in|recorded as)\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*\s*(?:\.|\s|,|in)/i) ||
-    text.match(/(?:Current Name|Old Name|Former Name|Deponent Name|Full Name)\s*:\s*[*_]*([A-Za-z\s\.]+?)[*_]*(?:\n|,|$)/i);
+  // 1. Deponent Full Name Extraction
+  const namePatterns = [
+    /(?:my name is|i am|myself)\s*['"]?([A-Za-z\s\.]+?)['"]?(?:,\s*|\s+and|\s+i want|\s+need|\s+stating|\s+noticed|\.|$)/i,
+    /I,\s*[*_]*([A-Za-z\s\.]+?)[*_]*,\s*(?:Son|Daughter|Spouse|S\/o|D\/o|W\/o)/i,
+    /(?:recorded in|recorded as)\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*\s*(?:\.|\s|,|in)/i,
+    /(?:Current Name|Old Name|Former Name|Deponent Name|Full Name)\s*:\s*[*_]*([A-Za-z\s\.]+?)[*_]*(?:\n|,|$)/i,
+  ];
 
-  if (deponentMatch && deponentMatch[1]) {
-    const raw = deponentMatch[1].trim();
-    if (!raw.includes('[') && raw.length > 2) {
-      result.full_name = raw;
+  for (const pat of namePatterns) {
+    const match = combinedText.match(pat);
+    if (match && match[1]) {
+      const raw = match[1].trim();
+      if (!raw.includes('[') && raw.length > 2 && !raw.toLowerCase().startsWith('changing') && !raw.toLowerCase().startsWith('officially')) {
+        result.full_name = raw;
+        break;
+      }
     }
   }
 
   // 2. Father or Spouse Name
   const fatherMatch =
-    text.match(/(?:Son|Daughter|Spouse|S\/o|D\/o|W\/o)\s*(?:of)?\s*[*_]*([A-Za-z\s\.]+?)[*_]*,\s*aged/i) ||
-    text.match(/(?:Father's Name|Spouse Name|Father)\s*:\s*[*_]*([A-Za-z\s\.]+?)[*_]*(?:\n|,|$)/i);
+    combinedText.match(/(?:Son|Daughter|Spouse|S\/o|D\/o|W\/o)\s*(?:of)?\s*[*_]*([A-Za-z\s\.]+?)[*_]*,\s*aged/i) ||
+    combinedText.match(/(?:Father's Name|Spouse Name|Father)\s*:\s*[*_]*([A-Za-z\s\.]+?)[*_]*(?:\n|,|$)/i);
 
   if (fatherMatch && fatherMatch[1]) {
     const raw = fatherMatch[1].trim();
@@ -177,29 +261,34 @@ export function extractAffidavitDetails(text: string, defaultName?: string): Aff
 
   // 3. Age
   const ageMatch =
-    text.match(/aged\s*(?:about)?\s*[*_]*(\d+)[*_]*\s*years/i) ||
-    text.match(/(?:Age)\s*:\s*[*_]*(\d+)[*_]*/i);
+    combinedText.match(/aged\s*(?:about)?\s*[*_]*(\d+)[*_]*\s*years/i) ||
+    combinedText.match(/(?:Age)\s*:\s*[*_]*(\d+)[*_]*/i);
 
   if (ageMatch && ageMatch[1]) {
     result.age = parseInt(ageMatch[1], 10);
   }
 
-  // 4. City & State (general location search)
+  // 4. City & State (e.g. "Ahmedabad", "Gujarat", "in Ahmedabad")
   const cityStateMatch =
-    text.match(/Verified at\s*[*_]*([A-Za-z\s]+?)[*_]*,\s*[*_]*([A-Za-z\s]+?)[*_]*\s*on/i) ||
-    text.match(/(?:City)\s*:\s*[*_]*([A-Za-z\s]+?)[*_]*(?:\n|,|$)/i);
+    combinedText.match(/Verified at\s*[*_]*([A-Za-z\s]+?)[*_]*,\s*[*_]*([A-Za-z\s]+?)[*_]*\s*on/i) ||
+    combinedText.match(/(?:City)\s*:\s*[*_]*([A-Za-z\s]+?)[*_]*(?:\n|,|$)/i) ||
+    combinedText.match(/(?:in|at|city of)\s+([A-Za-z]+?)(?:,|\.|\s+state|\s+city|\s+please|\s+and|$)/i);
 
   if (cityStateMatch && cityStateMatch[1]) {
-    result.city = cityStateMatch[1].trim();
+    const candidate = cityStateMatch[1].trim();
+    const blacklist = ['my', 'official', 'our', 'a', 'an', 'this', 'word', 'government', 'educational'];
+    if (!blacklist.includes(candidate.toLowerCase()) && candidate.length > 2) {
+      result.city = candidate;
+    }
     if (cityStateMatch[2]) {
       result.state = cityStateMatch[2].trim();
     }
   }
 
-  // 5. Address (if present in preamble)
+  // 5. Address
   const addrMatch =
-    text.match(/residing at\s*[*_]*([\s\S]+?)[*_]*,\s*do hereby/i) ||
-    text.match(/(?:Address|Residence)\s*:\s*[*_]*([^\n]+?)[*_]*(?:\n|$)/i);
+    combinedText.match(/residing at\s*[*_]*([\s\S]+?)[*_]*,\s*do hereby/i) ||
+    combinedText.match(/(?:Address|Residence)\s*:\s*[*_]*([^\n]+?)[*_]*(?:\n|$)/i);
 
   if (addrMatch && addrMatch[1]) {
     const rawAddr = addrMatch[1].trim();
@@ -214,46 +303,72 @@ export function extractAffidavitDetails(text: string, defaultName?: string): Aff
   }
 
   // 6. Type-Specific Extraction
-  if (docType === 'dob_correction') {
-    // Look for date patterns (e.g. DD/MM/YYYY, DD-MM-YYYY, or Month DD, YYYY)
-    const dobMatch =
-      text.match(/from\s*["“'*_]*(\d{1,2}[-\/.]\d{1,2}[-\/.]\d{2,4}|\d{1,2}\s+[A-Za-z]+\s+\d{4})["”'*_]*\s*to\s*["“'*_]*(\d{1,2}[-\/.]\d{1,2}[-\/.]\d{2,4}|\d{1,2}\s+[A-Za-z]+\s+\d{4})["”'*_]*/i) ||
-      text.match(/(?:incorrect|erroneous|recorded)\s*(?:dob|date of birth)[:\s]*["“'*_]*(\d{1,2}[-\/.]\d{1,2}[-\/.]\d{2,4}|\d{1,2}\s+[A-Za-z]+\s+\d{4})["”'*_]*/i);
-
-    if (dobMatch && dobMatch[1]) {
-      result.old_value = dobMatch[1].trim();
-      if (dobMatch[2]) {
-        result.new_value = dobMatch[2].trim();
+  if (docType === 'surname_change') {
+    // Check "change surname from X to Y" (e.g. "from John Mehta to John Joshi")
+    const fromTo = combinedText.match(/(?:surname from|from)\s*['"“]?([A-Za-z\s]+?)['"”]?\s+to\s+['"“]?([A-Za-z\s]+?)['"”'’]?(?:,|\.|\s+in|\s+for|\s+and|\s+provide|\s+please|$)/i);
+    if (fromTo && fromTo[1] && fromTo[2]) {
+      result.old_value = fromTo[1].trim();
+      result.new_value = fromTo[2].trim();
+      if (!result.full_name) {
+        result.full_name = result.old_value;
       }
     }
 
+    // Check "change my surname to Verma" when name is "Rahul Sharma"
     if (!result.new_value) {
-      const correctMatch = text.match(/(?:actual|correct|true)\s*(?:dob|date of birth)[:\s]*["“'*_]*(\d{1,2}[-\/.]\d{1,2}[-\/.]\d{2,4}|\d{1,2}\s+[A-Za-z]+\s+\d{4})["”'*_]*/i);
-      if (correctMatch && correctMatch[1]) {
-        result.new_value = correctMatch[1].trim();
+      const toSurMatch = combinedText.match(/(?:change(?:\s+my)?\s+surname\s+to|new\s+surname\s+is)\s*['"“]?([A-Za-z]+)['"”'’]?/i);
+      if (toSurMatch && toSurMatch[1]) {
+        const newSur = toSurMatch[1].trim();
+        const fn = result.full_name || defaultName || '';
+        if (fn && fn.includes(' ')) {
+          const firstPart = fn.substring(0, fn.lastIndexOf(' '));
+          result.new_value = `${firstPart} ${newSur}`;
+          result.old_value = fn;
+        } else {
+          result.new_value = newSur;
+          if (fn) result.old_value = fn;
+        }
       }
     }
+
+    if (!result.old_value && result.full_name) {
+      result.old_value = result.full_name;
+    }
+    result.old_name = result.old_value;
+    result.new_name = result.new_value;
+
+  } else if (docType === 'dob_correction') {
+    const dates = combinedText.match(/(\b\d{1,2}[-\/.]\d{1,2}[-\/.]\d{2,4}\b|\b\d{1,2}\s+[A-Za-z]+\s+\d{4}\b)/gi);
+    if (dates && dates.length >= 2) {
+      result.old_value = dates[0].trim();
+      result.new_value = dates[1].trim();
+    } else if (dates && dates.length === 1) {
+      result.new_value = dates[0].trim();
+      result.old_value = '[Incorrect Recorded DOB]';
+    }
+
   } else if (docType === 'address_change') {
     const oldAddrMatch =
-      text.match(/(?:previously residing at|earlier address|previous address)\s*[:\s]*["“'*_]*([^\n"”]+?)["”'*_]*(?:\.|\n|,|where)/i) ||
-      text.match(/from\s*["“'*_]*([^\n"”]+?)["”'*_]*\s*to/i);
+      combinedText.match(/(?:previously residing at|earlier address|previous address)\s*[:\s]*["“'*_]*([^\n"”]+?)["”'*_]*(?:\.|\n|,|where)/i) ||
+      combinedText.match(/from\s*["“'*_]*([^\n"”]+?)["”'*_]*\s*to/i);
 
     if (oldAddrMatch && oldAddrMatch[1] && !oldAddrMatch[1].includes('[')) {
       result.old_value = oldAddrMatch[1].trim();
     }
 
     const newAddrMatch =
-      text.match(/(?:currently residing at|shifted to|new address|present address)\s*[:\s]*["“'*_]*([^\n"”]+?)["”'*_]*(?:\.|\n|,|where|do hereby)/i) ||
-      text.match(/to\s*["“'*_]*([^\n"”]+?)["”'*_]*(?:\.|\n|,|$)/i);
+      combinedText.match(/(?:currently residing at|shifted to|new address|present address|moving to a new apartment in)\s*[:\s]*["“'*_]*([^\n"”]+?)["”'*_]*(?:\.|\n|,|where|do hereby|\s+please)/i) ||
+      combinedText.match(/to\s*["“'*_]*([^\n"”]+?)["”'*_]*(?:\.|\n|,|$)/i);
 
     if (newAddrMatch && newAddrMatch[1] && !newAddrMatch[1].includes('[')) {
       result.new_value = newAddrMatch[1].trim();
       result.address = result.new_value;
     }
+
   } else if (docType === 'relation_update') {
     const relMatch =
-      text.match(/recorded as\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*,\s*whereas the true.*?name is\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*/i) ||
-      text.match(/from\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*\s*to\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*/i);
+      combinedText.match(/recorded as\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*,\s*whereas the true.*?name is\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*/i) ||
+      combinedText.match(/from\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*\s*to\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*/i);
 
     if (relMatch && relMatch[1] && !relMatch[1].includes('[')) {
       result.old_value = relMatch[1].trim();
@@ -261,10 +376,11 @@ export function extractAffidavitDetails(text: string, defaultName?: string): Aff
         result.new_value = relMatch[2].trim();
       }
     }
+
   } else if (docType === 'one_and_same') {
     const sameMatch =
-      text.match(/(?:variations|specifically as)\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*\s*and\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*/i) ||
-      text.match(/names\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*\s*and\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*\s*refer/i);
+      combinedText.match(/(?:variations|specifically as)\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*\s*and\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*/i) ||
+      combinedText.match(/names\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*\s*and\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*\s*refer/i);
 
     if (sameMatch && sameMatch[1] && !sameMatch[1].includes('[')) {
       result.old_value = sameMatch[1].trim();
@@ -272,27 +388,35 @@ export function extractAffidavitDetails(text: string, defaultName?: string): Aff
         result.new_value = sameMatch[2].trim();
       }
     }
-  } else {
-    // name_change
-    const newNameMatch =
-      text.match(/from\s*["“'*_]*[A-Za-z\s\.]+?["”'*_]*\s*to\s*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*(?:\.|\s|,|$)/i) ||
-      text.match(/(?:New Name|solely as|addressed as)\s*[:\s]*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*(?:\.|\s|,|\n|$)/i) ||
-      text.match(/affidavit for\s*[*_]*([A-Za-z\s\.]+?)[*_]*\s*(?:has been|is)/i);
 
-    if (newNameMatch && newNameMatch[1] && !newNameMatch[1].includes('[')) {
-      result.new_name = newNameMatch[1].trim();
-      result.new_value = newNameMatch[1].trim();
+  } else {
+    // name_change / spelling correction
+    const spellingMatch = combinedText.match(/(?:spelling from|name from|from)\s*['"“]?([A-Za-z\s\.]+?)['"”]?\s+to\s+['"“]?([A-Za-z\s\.]+?)['"”'’]?(?:,|\.|\s+in|\s+for|\s+and|\s+please|$)/i);
+    if (spellingMatch && spellingMatch[1] && spellingMatch[2]) {
+      result.old_value = spellingMatch[1].trim();
+      result.new_value = spellingMatch[2].trim();
+      result.old_name = result.old_value;
+      result.new_name = result.new_value;
+    } else {
+      const newNameMatch =
+        combinedText.match(/(?:New Name|solely as|addressed as)\s*[:\s]*["“'*_]*([A-Za-z\s\.]+?)["”'*_]*(?:\.|\s|,|\n|$)/i) ||
+        combinedText.match(/affidavit for\s*[*_]*([A-Za-z\s\.]+?)[*_]*\s*(?:has been|is)/i);
+
+      if (newNameMatch && newNameMatch[1] && !newNameMatch[1].includes('[')) {
+        result.new_name = newNameMatch[1].trim();
+        result.new_value = newNameMatch[1].trim();
+      }
+      result.old_value = result.full_name;
+      result.old_name = result.full_name;
     }
-    result.old_value = result.full_name;
-    result.old_name = result.full_name;
   }
 
-  // Fallbacks using defaultName if available
+  // Fallbacks using defaultName
   if (!result.full_name && defaultName) {
     result.full_name = defaultName;
   }
   if (!result.full_name) {
-    result.full_name = 'Deponent Full Name';
+    result.full_name = result.old_value || 'Deponent Full Name';
   }
 
   return result;
@@ -339,6 +463,7 @@ export async function generateAndDownloadAffidavit(payload: AffidavitPayload): P
 
   // Extract filename from Content-Disposition header if present, or create a sensible fallback
   const prefixMap: Record<string, string> = {
+    surname_change: 'Surname_Change',
     dob_correction: 'DOB_Correction',
     relation_update: 'Relation_Update',
     one_and_same: 'One_And_Same_Person',

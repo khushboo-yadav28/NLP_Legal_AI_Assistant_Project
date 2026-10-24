@@ -10,7 +10,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.db.database import SessionLocal, get_db
 from app.db.repositories.chat_repository import ChatRepository
-from app.models.chat import ChatMessageResponse,ChatSessionCreate,ChatSessionResponse,SendMessageRequest
+from app.db.user_chat_models import ChatSessionTable
+from app.models.chat import ChatMessageResponse, ChatSessionCreate, ChatSessionResponse, SendMessageRequest
 from app.rag.generation.chat_prompt_builder import PromptBuilder
 from app.rag.retrieval.retriever import Retriever
 from app.core.security import get_current_user
@@ -23,30 +24,106 @@ router = APIRouter(tags=["Legal Chat & Consultations"])
 def create_chat_session(
     payload: ChatSessionCreate,
     current_user: User = Depends(get_current_user),
-    # user_id: str,  # In production, extract this from auth token
     db: Session = Depends(get_db)
 ):
-    """Creates a new Chat Session (Sidebar item)."""
+    """Creates a new Chat Session (Sidebar item) strictly associated with the authenticated user."""
+    # Reuse existing unused empty session if titled "New Consultation"
+    if payload.title == "New Consultation":
+        existing_empty = (
+            db.query(ChatSessionTable)
+            .filter(
+                ChatSessionTable.user_id == str(current_user.id),
+                ChatSessionTable.title == "New Consultation"
+            )
+            .order_by(ChatSessionTable.created_at.desc())
+            .first()
+        )
+        if existing_empty and len(existing_empty.messages) == 0:
+            return existing_empty
+
     session = ChatRepository.create_session(db=db, user_id=str(current_user.id), title=payload.title)
     return session
 
 
 @router.get("/", response_model=List[ChatSessionResponse])
 def list_user_sessions(
-    # user_id: str,  # In production, extract this from auth token
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Fetches all main chat sessions for the logged-in user."""
-    # user = ChatRepository.get_user_by_id(db=db, user_id=str(current_user.id))
-    # if not user:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_404_NOT_FOUND, 
-    #         detail=f"User '{str(current_user.id)}' not found."
-    #     )
-        
+    """Fetches all main chat sessions strictly filtered by current_user.id."""
     sessions = ChatRepository.get_user_sessions(db=db, user_id=str(current_user.id))
+
+    updated_any = False
+    for s in sessions:
+        if s.title == "New Consultation":
+            first_user_msg = next((m for m in s.messages if m.sender == "user"), None)
+            if first_user_msg and first_user_msg.text.strip():
+                clean_text = first_user_msg.text.strip().replace("\n", " ")
+                s.title = clean_text[:40] + ("..." if len(clean_text) > 40 else "")
+                updated_any = True
+
+    # Prune redundant empty "New Consultation" sessions if any
+    empty_sessions = [s for s in sessions if s.title == "New Consultation" and len(s.messages) == 0]
+    if len(empty_sessions) > 1:
+        for redundant in empty_sessions[1:]:
+            db.delete(redundant)
+            updated_any = True
+
+    if updated_any:
+        db.commit()
+        sessions = ChatRepository.get_user_sessions(db=db, user_id=str(current_user.id))
+
     return sessions
+
+
+@router.get("/{session_id}", response_model=ChatSessionResponse)
+def get_chat_session(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Fetches a single chat session strictly verifying current_user ownership."""
+    session = ChatRepository.get_session_by_id(db, session_id=session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    if str(session.user_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Unauthorized access to chat session")
+    return session
+
+
+@router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_chat_session(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Deletes a chat session strictly verifying current_user ownership."""
+    session = ChatRepository.get_session_by_id(db, session_id=session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    if str(session.user_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Unauthorized access to chat session")
+    ChatRepository.delete_session(db, session_id=session_id)
+    return None
+
+
+@router.patch("/{session_id}/title", response_model=ChatSessionResponse)
+def update_chat_session_title(
+    session_id: str,
+    payload: ChatSessionCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Updates a chat session's title strictly verifying current_user ownership."""
+    session = ChatRepository.get_session_by_id(db, session_id=session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    if str(session.user_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Unauthorized access to chat session")
+    session.title = payload.title.strip() or session.title
+    db.commit()
+    db.refresh(session)
+    return session
 
 
 @router.post("/upload", response_model=ChatSessionResponse)
@@ -55,12 +132,11 @@ async def upload_document_and_cache(
     file: UploadFile = File(...),
     session_id: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
-    # user_id: str = Form(...),  # In production, extract from current_user
     db: Session = Depends(get_db)
 ):
     """
     Handles file upload, uploads to Gemini File API, creates a Context Cache (TTL: 1h),
-    and links the cache metadata to the ChatSession.
+    and links the cache metadata to the ChatSession (enforcing strict user ownership).
     """
     llm_client = request.app.state.llm_client
 
@@ -69,6 +145,8 @@ async def upload_document_and_cache(
         session = ChatRepository.get_session_by_id(db, session_id=session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Chat session not found")
+        if str(session.user_id) != str(current_user.id):
+            raise HTTPException(status_code=403, detail="Unauthorized access to chat session")
     else:
         title = f"Document: {file.filename[:30]}"
         session = ChatRepository.create_session(db=db, user_id=str(current_user.id), title=title)
@@ -113,16 +191,12 @@ async def upload_document_and_cache(
 @router.post("/message/stream")
 async def send_message_stream(
     request: Request,
-    payload: SendMessageRequest,  # <-- Adding this brings back the Swagger UI JSON body box!
+    payload: SendMessageRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Streams response via SSE while enforcing session ownership."""
+    """Streams response via SSE while strictly enforcing user session ownership."""
     start_time = time.perf_counter()
-
-    # Since SendMessageRequest is already validated and parsed by FastAPI via Pydantic,
-    # you no longer need manual raw_bytes json loads unless you want to keep your fallback regex.
-    # If you want to keep your regex safety fallback, you can inspect payload fields directly.
 
     # 1. Verify Chat Session & Ownership
     session = ChatRepository.get_session_by_id(db, session_id=payload.session_id)
@@ -146,6 +220,12 @@ async def send_message_stream(
         text=payload.query
     )
 
+    # Auto-derive session title in DB if it was "New Consultation"
+    if session.title == "New Consultation" and payload.query.strip():
+        clean_query = payload.query.strip().replace("\n", " ")
+        session.title = clean_query[:40] + ("..." if len(clean_query) > 40 else "")
+        db.commit()
+
     # 4. Fetch past conversation history
     history = ChatRepository.get_recent_messages(db, session_id=payload.session_id, limit=4)
 
@@ -167,15 +247,6 @@ async def send_message_stream(
         full_text = []
 
         try:
-            # --- DRY RUN / MOCK MODE ---
-            # Yield fake streaming text without calling Gemini API
-            # mock_chunks = ["[DRY RUN] Prompt assembled successfully. ", "Gemini call bypassed."]
-            # for chunk_text in mock_chunks:
-            #     full_text.append(chunk_text)
-            #     yield f"data: {json.dumps({'text': chunk_text})}\n\n"
-
-
-            # --- REAL GEMINI STREAMING (COMMENTED OUT FOR TESTING) ---
             for chunk_text in llm_client.generate_stream_with_file(
                 prompt=prompt,
                 file_uris=file_uris
@@ -205,13 +276,14 @@ async def send_message_stream(
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
+
 @router.get("/{session_id}/messages", response_model=List[ChatMessageResponse])
 def get_session_messages(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Fetches all past messages for a specific chat session in chronological order."""
+    """Fetches all past messages for a specific chat session strictly enforcing user ownership."""
     session = ChatRepository.get_session_by_id(db, session_id=session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found")
@@ -219,5 +291,4 @@ def get_session_messages(
     if str(session.user_id) != str(current_user.id):
         raise HTTPException(status_code=403, detail="Unauthorized access to chat session")
 
-    # Use the dedicated repository method to pull all messages ordered ascendingly
     return ChatRepository.get_all_session_messages(db, session_id=session_id)
